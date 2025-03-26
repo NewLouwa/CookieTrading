@@ -1,6 +1,9 @@
 """Utility functions for formatting data."""
 
 from rich.prompt import Prompt
+from rich.console import Console
+
+console = Console()
 
 def parse_price(price_str):
     """
@@ -31,7 +34,16 @@ def format_price(price):
     return f"${price:.2f}"
 
 def get_comment(prompt_text, max_length=500):
-    """Get an optional comment from the user."""
+    """
+    Get an optional comment from the user.
+    
+    Args:
+        prompt_text (str): The prompt to display
+        max_length (int): Maximum length of the comment
+        
+    Returns:
+        str: The comment, or None if cancelled
+    """
     comment = Prompt.ask(prompt_text, default="")
     if comment.lower() == 'cancel':
         return None

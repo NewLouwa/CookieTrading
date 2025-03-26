@@ -533,6 +533,7 @@ class CookieTrader:
         - Settings & System (yellow)
         
         Each section is color-coded and uses emojis for better visual organization.
+        Note: The main menu is the only place where 'cancel' is not accepted.
         """
         while True:
             console.clear()
@@ -575,16 +576,13 @@ class CookieTrader:
             )
             console.print(menu_panel)
             
-            # Get user choice with validation
+            # Get user choice with validation (main menu doesn't accept cancel)
             choice = Prompt.ask(
                 "\n[cyan]Select an option[/cyan]",
-                choices=["1", "2", "3", "4", "5", "6", "7", "8", "cancel"],
+                choices=["1", "2", "3", "4", "5", "6", "7", "8"],
                 show_choices=False
             )
             
-            if choice.lower() == 'cancel':
-                continue
-                
             if choice == "1":
                 # Create ingredient choices display string
                 ingredient_choices = "/".join(INGREDIENTS.keys())
@@ -601,6 +599,7 @@ class CookieTrader:
                 
                 quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
                 if quantity is None:
+                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 
                 # Handle price input
@@ -608,18 +607,23 @@ class CookieTrader:
                     try:
                         price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
                         if price_str.lower() == 'cancel':
+                            console.print("[yellow]Operation cancelled[/yellow]")
                             break
                         price = parse_price(price_str)
                         break
                     except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            console.print("[yellow]Operation cancelled[/yellow]")
+                            break
                         console.print(f"[red]{str(e)}[/red]")
                 
                 if price_str.lower() == 'cancel':
                     continue
                 
                 # Get optional comment
-                comment = self.get_comment("Add a comment (optional, press Enter to skip or 'cancel' to exit)")
-                if comment.lower() == 'cancel':
+                comment = get_comment("Add a comment (optional, press Enter to skip or 'cancel' to exit)")
+                if comment is None:
+                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 
                 self.add_position(ingredient.upper(), quantity, price, comment)
@@ -628,6 +632,7 @@ class CookieTrader:
                 self.show_open_positions()
                 position_input = Prompt.ask("Enter position ID to close (or 'cancel' to exit)")
                 if position_input.lower() == 'cancel':
+                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 try:
                     position_id = int(position_input)
@@ -641,11 +646,13 @@ class CookieTrader:
                     try:
                         price_str = Prompt.ask("Enter exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
                         if price_str.lower() == 'cancel':
+                            console.print("[yellow]Operation cancelled[/yellow]")
                             break
                         exit_price = parse_price(price_str)
                         break
                     except ValueError as e:
                         if str(e) == "Operation cancelled":
+                            console.print("[yellow]Operation cancelled[/yellow]")
                             break
                         console.print(f"[red]{str(e)}[/red]")
                 
@@ -653,8 +660,9 @@ class CookieTrader:
                     continue
                 
                 # Get optional comment
-                comment = self.get_comment("Add a comment (optional, press Enter to skip or 'cancel' to exit)")
-                if comment is None:  # None indicates cancellation
+                comment = get_comment("Add a comment (optional, press Enter to skip or 'cancel' to exit)")
+                if comment is None:
+                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 
                 self.close_position(position_id, exit_price, comment)
@@ -663,6 +671,7 @@ class CookieTrader:
                 self.show_open_positions()
                 position_input = Prompt.ask("Enter position ID to simulate (or 'cancel' to exit)")
                 if position_input.lower() == 'cancel':
+                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 try:
                     position_id = int(position_input)
@@ -676,10 +685,14 @@ class CookieTrader:
                     try:
                         price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
                         if price_str.lower() == 'cancel':
+                            console.print("[yellow]Operation cancelled[/yellow]")
                             break
                         exit_price = parse_price(price_str)
                         break
                     except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            console.print("[yellow]Operation cancelled[/yellow]")
+                            break
                         console.print(f"[red]{str(e)}[/red]")
                 
                 if price_str.lower() == 'cancel':
@@ -695,6 +708,7 @@ class CookieTrader:
                 
                 ingredient = Prompt.ask(f"\nEnter ingredient code [{ingredient_choices}] (or 'cancel' to exit)")
                 if ingredient.lower() == 'cancel':
+                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                     
                 if ingredient.upper() not in INGREDIENTS:
@@ -703,6 +717,7 @@ class CookieTrader:
                 
                 quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
                 if quantity is None:
+                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 
                 # Handle entry price input
@@ -710,10 +725,14 @@ class CookieTrader:
                     try:
                         price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
                         if price_str.lower() == 'cancel':
+                            console.print("[yellow]Operation cancelled[/yellow]")
                             break
                         entry_price = parse_price(price_str)
                         break
                     except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            console.print("[yellow]Operation cancelled[/yellow]")
+                            break
                         console.print(f"[red]{str(e)}[/red]")
                 
                 if price_str.lower() == 'cancel':
@@ -724,10 +743,14 @@ class CookieTrader:
                     try:
                         price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
                         if price_str.lower() == 'cancel':
+                            console.print("[yellow]Operation cancelled[/yellow]")
                             break
                         exit_price = parse_price(price_str)
                         break
                     except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            console.print("[yellow]Operation cancelled[/yellow]")
+                            break
                         console.print(f"[red]{str(e)}[/red]")
                 
                 if price_str.lower() == 'cancel':
@@ -746,6 +769,7 @@ class CookieTrader:
                     try:
                         count_input = Prompt.ask("Enter new trader count (or 'cancel' to exit)")
                         if count_input.lower() == 'cancel':
+                            console.print("[yellow]Operation cancelled[/yellow]")
                             break
                         count = int(count_input)
                         if count < 0:
