@@ -178,18 +178,10 @@ class CookieTrader:
                 return
             
             # Ask for number of shares to sell
-            while True:
-                try:
-                    sell_quantity = int(Prompt.ask(f"Enter number of shares to sell (max {total_quantity})"))
-                    if sell_quantity <= 0:
-                        console.print("[red]Quantity must be greater than 0![/red]")
-                        continue
-                    if sell_quantity > total_quantity:
-                        console.print(f"[red]Cannot sell more shares than you have! Maximum available: {total_quantity}[/red]")
-                        continue
-                    break
-                except ValueError:
-                    console.print("[red]Please enter a valid number![/red]")
+            sell_quantity = get_quantity("Enter number of shares to sell", total_quantity)
+            if sell_quantity is None:
+                console.print("[yellow]Operation cancelled[/yellow]")
+                return
             
             # Calculate profit/loss
             gross_pl = (exit_price - entry_price) * sell_quantity
@@ -224,18 +216,18 @@ class CookieTrader:
             
             conn.commit()
             
-        pl_color = "green" if net_pl > 0 else "red"
-        pl_emoji = "📈" if net_pl > 0 else "📉"
-        output = f"\n[{pl_color}]{pl_emoji} Position Closed:[/{pl_color}]"
-        output += f"\nPosition ID: {position_id}"
-        output += f"\nShares Sold: {sell_quantity} of {total_quantity}"
-        output += f"\nExit Price: {format_price(exit_price)}"
-        output += f"\nGross P/L: {format_price(gross_pl)}"
-        output += f"\nFee: {format_price(fee_amount)} @ {fee_percentage}%"
-        output += f"\nNet P/L: {format_price(net_pl)}"
-        if comment:
-            output += f"\nComment: {comment}"
-        console.print(output)
+            pl_color = "green" if net_pl > 0 else "red"
+            pl_emoji = "📈" if net_pl > 0 else "📉"
+            output = f"\n[{pl_color}]{pl_emoji} Position Closed:[/{pl_color}]"
+            output += f"\nPosition ID: {position_id}"
+            output += f"\nShares Sold: {sell_quantity} of {total_quantity}"
+            output += f"\nExit Price: {format_price(exit_price)}"
+            output += f"\nGross P/L: {format_price(gross_pl)}"
+            output += f"\nFee: {format_price(fee_amount)} @ {fee_percentage}%"
+            output += f"\nNet P/L: {format_price(net_pl)}"
+            if comment:
+                output += f"\nComment: {comment}"
+            console.print(output)
 
     def get_position(self, position_id):
         """Get a position by ID."""
@@ -257,18 +249,10 @@ class CookieTrader:
                 ingredient, total_quantity, entry_price = position
                 
                 # Ask for number of shares to simulate
-                while True:
-                    try:
-                        sell_quantity = int(Prompt.ask(f"Enter number of shares to simulate (max {total_quantity})"))
-                        if sell_quantity <= 0:
-                            console.print("[red]Quantity must be greater than 0![/red]")
-                            continue
-                        if sell_quantity > total_quantity:
-                            console.print(f"[red]Cannot simulate more shares than you have! Maximum available: {total_quantity}[/red]")
-                            continue
-                        break
-                    except ValueError:
-                        console.print("[red]Please enter a valid number![/red]")
+                sell_quantity = get_quantity("Enter number of shares to simulate", total_quantity)
+                if sell_quantity is None:
+                    console.print("[yellow]Operation cancelled[/yellow]")
+                    return
                 
                 gross_pl = (exit_price - entry_price) * sell_quantity
                 fee_percentage = self.get_current_fee()
@@ -518,30 +502,47 @@ class CookieTrader:
             console.print("7. 👥 Update Traders Count")
             console.print("[bold red]8. ❌ Exit[/bold red]")
             
-            choice = Prompt.ask("\nSelect an option", choices=["1", "2", "3", "4", "5", "6", "7", "8"])
+            choice = Prompt.ask("\nSelect an option (or 'cancel' to exit current operation)", choices=["1", "2", "3", "4", "5", "6", "7", "8", "cancel"])
             
+            if choice.lower() == 'cancel':
+                continue
+                
             if choice == "1":
                 # Create ingredient choices display string
                 ingredient_choices = "/".join(INGREDIENTS.keys())
                 ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
                 console.print(f"\nAvailable ingredients:\n{ingredient_display}")
-                ingredient = Prompt.ask(f"\nEnter ingredient code [{ingredient_choices}]")
+                
+                ingredient = Prompt.ask(f"\nEnter ingredient code [{ingredient_choices}] (or 'cancel' to exit)")
+                if ingredient.lower() == 'cancel':
+                    continue
+                    
                 if ingredient.upper() not in INGREDIENTS:
                     console.print("[red]Invalid ingredient code![/red]")
                     continue
-                quantity = int(Prompt.ask("Enter number of shares"))
+                
+                quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
+                if quantity is None:
+                    continue
                 
                 # Handle price input
                 while True:
                     try:
-                        price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45)")
+                        price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
+                        if price_str.lower() == 'cancel':
+                            break
                         price = parse_price(price_str)
                         break
                     except ValueError as e:
                         console.print(f"[red]{str(e)}[/red]")
                 
+                if price_str.lower() == 'cancel':
+                    continue
+                
                 # Get optional comment
-                comment = self.get_comment("Add a comment (optional)")
+                comment = self.get_comment("Add a comment (optional, press Enter to skip or 'cancel' to exit)")
+                if comment.lower() == 'cancel':
+                    continue
                 
                 self.add_position(ingredient.upper(), quantity, price, comment)
                 
