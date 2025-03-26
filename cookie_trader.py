@@ -531,7 +531,15 @@ class CookieTrader:
                 
             elif choice == "2":
                 self.show_open_positions()
-                position_id = int(Prompt.ask("Enter position ID to close"))
+                position_input = Prompt.ask("Enter position ID to close (or 'cancel' to exit)")
+                if position_input.lower() == 'cancel':
+                    continue
+                try:
+                    position_id = int(position_input)
+                except ValueError:
+                    console.print("[red]Invalid position ID![/red]")
+                    self.wait_for_user()
+                    continue
                 
                 # Handle exit price input
                 while True:
