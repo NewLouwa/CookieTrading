@@ -660,6 +660,10 @@ Trade Summary:
         
         self.wait_for_user()
 
+    def clear_screen(self):
+        """Clear the terminal screen."""
+        os.system('cls' if os.name == 'nt' else 'clear')
+
 if __name__ == "__main__":
     trader = CookieTrader()
     trader.show_menu() 
