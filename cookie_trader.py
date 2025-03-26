@@ -24,10 +24,7 @@ from rich.prompt import Prompt, Confirm
 import emoji
 import re
 from rich.panel import Panel
-from src.utils.formatting import (
-    parse_price, format_price, get_comment, get_quantity,
-    get_input
-)
+from src.utils.formatting import parse_price, format_price, get_comment, get_quantity, custom_prompt
 
 # Initialize Rich console for beautiful terminal output
 console = Console()
@@ -592,7 +589,7 @@ class CookieTrader:
                 ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
                 console.print(f"\nAvailable ingredients:\n{ingredient_display}")
                 
-                ingredient = get_input(f"\nEnter ingredient code [{ingredient_choices}]")
+                ingredient = custom_prompt(f"\nEnter ingredient code [{ingredient_choices}]")
                 if ingredient is None:
                     continue
                     
@@ -605,12 +602,19 @@ class CookieTrader:
                     continue
                 
                 # Handle price input
-                price = get_input(
-                    "Enter entry price (e.g., 123.45 or $123.45)",
-                    validator=parse_price,
-                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
-                )
-                if price is None:
+                while True:
+                    try:
+                        price_str = custom_prompt("Enter entry price (e.g., 123.45 or $123.45)")
+                        if price_str is None:
+                            break
+                        price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            break
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str is None:
                     continue
                 
                 # Get optional comment
@@ -622,21 +626,30 @@ class CookieTrader:
                 
             elif choice == "2":
                 self.show_open_positions()
-                position_id = get_input(
-                    "Enter position ID to close",
-                    validator=lambda x: int(x),
-                    error_message="Invalid position ID!"
-                )
-                if position_id is None:
+                position_input = custom_prompt("Enter position ID to close")
+                if position_input is None:
+                    continue
+                try:
+                    position_id = int(position_input)
+                except ValueError:
+                    console.print("[red]Invalid position ID![/red]")
+                    self.wait_for_user()
                     continue
                 
                 # Handle exit price input
-                exit_price = get_input(
-                    "Enter exit price (e.g., 123.45 or $123.45)",
-                    validator=parse_price,
-                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
-                )
-                if exit_price is None:
+                while True:
+                    try:
+                        price_str = custom_prompt("Enter exit price (e.g., 123.45 or $123.45)")
+                        if price_str is None:
+                            break
+                        exit_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            break
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str is None:
                     continue
                 
                 # Get optional comment
@@ -648,21 +661,30 @@ class CookieTrader:
                 
             elif choice == "3":
                 self.show_open_positions()
-                position_id = get_input(
-                    "Enter position ID to simulate",
-                    validator=lambda x: int(x),
-                    error_message="Invalid position ID!"
-                )
-                if position_id is None:
+                position_input = custom_prompt("Enter position ID to simulate")
+                if position_input is None:
+                    continue
+                try:
+                    position_id = int(position_input)
+                except ValueError:
+                    console.print("[red]Invalid position ID![/red]")
+                    self.wait_for_user()
                     continue
 
                 # Handle hypothetical price input
-                exit_price = get_input(
-                    "Enter hypothetical exit price (e.g., 123.45 or $123.45)",
-                    validator=parse_price,
-                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
-                )
-                if exit_price is None:
+                while True:
+                    try:
+                        price_str = custom_prompt("Enter hypothetical exit price (e.g., 123.45 or $123.45)")
+                        if price_str is None:
+                            break
+                        exit_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            break
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str is None:
                     continue
                 
                 self.simulate_close(position_id, exit_price)
@@ -673,7 +695,7 @@ class CookieTrader:
                 ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
                 console.print(f"\nAvailable ingredients:\n{ingredient_display}")
                 
-                ingredient = get_input(f"\nEnter ingredient code [{ingredient_choices}]")
+                ingredient = custom_prompt(f"\nEnter ingredient code [{ingredient_choices}]")
                 if ingredient is None:
                     continue
                     
@@ -686,21 +708,35 @@ class CookieTrader:
                     continue
                 
                 # Handle entry price input
-                entry_price = get_input(
-                    "Enter entry price (e.g., 123.45 or $123.45)",
-                    validator=parse_price,
-                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
-                )
-                if entry_price is None:
+                while True:
+                    try:
+                        price_str = custom_prompt("Enter entry price (e.g., 123.45 or $123.45)")
+                        if price_str is None:
+                            break
+                        entry_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            break
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str is None:
                     continue
                 
                 # Handle exit price input
-                exit_price = get_input(
-                    "Enter hypothetical exit price (e.g., 123.45 or $123.45)",
-                    validator=parse_price,
-                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
-                )
-                if exit_price is None:
+                while True:
+                    try:
+                        price_str = custom_prompt("Enter hypothetical exit price (e.g., 123.45 or $123.45)")
+                        if price_str is None:
+                            break
+                        exit_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            break
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str is None:
                     continue
                 
                 self.simulate_trade(ingredient.upper(), quantity, entry_price, exit_price)
@@ -712,19 +748,22 @@ class CookieTrader:
                 self.show_trading_history()
                 
             elif choice == "7":
-                count = get_input(
-                    "Enter new trader count",
-                    validator=lambda x: int(x),
-                    error_message="Invalid trader count!"
-                )
-                if count is None:
+                while True:
+                    try:
+                        count_input = custom_prompt("Enter new trader count")
+                        if count_input is None:
+                            break
+                        count = int(count_input)
+                        if count < 0:
+                            raise ValueError("Trader count cannot be negative")
+                        self.update_traders(count)
+                        break
+                    except ValueError as e:
+                        console.print(f"[red]Invalid trader count: {str(e)}[/red]")
+                        self.wait_for_user()
+                
+                if count_input is None:
                     continue
-                    
-                if count < 0:
-                    console.print("[red]Trader count cannot be negative![/red]")
-                    continue
-                    
-                self.update_traders(count)
                 
             elif choice == "8":
                 console.print("[red]Goodbye! 👋[/red]")

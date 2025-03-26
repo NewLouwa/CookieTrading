@@ -2,59 +2,42 @@
 
 from rich.prompt import Prompt
 from rich.console import Console
-from typing import Optional, Union, Callable, Any
 
 console = Console()
 
-def get_input(
-    prompt: str,
-    validator: Optional[Callable[[str], Any]] = None,
-    error_message: Optional[str] = None,
-    default: str = "",
-    show_default: bool = True,
-    show_cancel: bool = True
-) -> Optional[Any]:
+def custom_prompt(prompt_text, choices=None, default="", show_choices=True):
     """
-    Get user input with validation and cancel support.
+    Custom prompt function that handles cancel functionality consistently.
     
     Args:
-        prompt (str): The prompt text to display
-        validator (Callable, optional): Function to validate the input
-        error_message (str, optional): Custom error message for validation failures
+        prompt_text (str): The prompt to display
+        choices (list, optional): List of valid choices
         default (str, optional): Default value if user just presses Enter
-        show_default (bool, optional): Whether to show the default value in prompt
-        show_cancel (bool, optional): Whether to show cancel option in prompt
+        show_choices (bool, optional): Whether to show available choices
         
     Returns:
-        Any: The validated input value, or None if cancelled
+        str: User input, or None if cancelled
     """
-    # Add cancel option to prompt if enabled
-    if show_cancel:
-        prompt = f"{prompt} (or 'cancel' to exit)"
+    # Add cancel option to choices if provided
+    if choices is not None:
+        choices = list(choices) + ['cancel']
     
-    while True:
-        try:
-            value = Prompt.ask(prompt, default=default, show_default=show_default)
-            
-            # Check for cancel
-            if value.lower() == 'cancel':
-                console.print("[yellow]Operation cancelled[/yellow]")
-                return None
-            
-            # If no validator, return the raw input
-            if validator is None:
-                return value
-            
-            # Validate the input
-            return validator(value)
-            
-        except ValueError as e:
-            if error_message:
-                console.print(f"[red]{error_message}[/red]")
-            else:
-                console.print(f"[red]{str(e)}[/red]")
+    # Add cancel hint to prompt
+    if 'cancel' not in prompt_text.lower():
+        prompt_text = f"{prompt_text} (or 'cancel' to exit)"
+    
+    try:
+        result = Prompt.ask(prompt_text, choices=choices, default=default, show_choices=show_choices)
+        if result.lower() == 'cancel':
+            console.print("[yellow]Operation cancelled[/yellow]")
+            return None
+        return result
+    except Exception as e:
+        if "invalid choice" in str(e).lower():
+            console.print("[red]Invalid input![/red]")
+        return None
 
-def parse_price(price_str: str) -> float:
+def parse_price(price_str):
     """
     Parse a price string into a float.
     
@@ -67,6 +50,9 @@ def parse_price(price_str: str) -> float:
     Raises:
         ValueError: If the price string is invalid
     """
+    if price_str is None:  # Handle cancelled input
+        raise ValueError("Operation cancelled")
+        
     # Remove currency symbol and whitespace
     price_str = price_str.replace('$', '').strip()
     
@@ -75,11 +61,11 @@ def parse_price(price_str: str) -> float:
     except ValueError:
         raise ValueError("Invalid price format. Enter a number (e.g., 123.45 or $123.45)")
 
-def format_price(price: float) -> str:
+def format_price(price):
     """Format a price with currency symbol and 2 decimal places."""
     return f"${price:.2f}"
 
-def get_comment(prompt_text: str, max_length: int = 500) -> Optional[str]:
+def get_comment(prompt_text, max_length=500):
     """
     Get an optional comment from the user.
     
@@ -90,14 +76,36 @@ def get_comment(prompt_text: str, max_length: int = 500) -> Optional[str]:
     Returns:
         str: The comment, or None if cancelled
     """
-    comment = get_input(prompt_text, default="")
+    comment = custom_prompt(prompt_text)
     if comment is None:
         return None
     if comment:
         return comment[:max_length]
     return ""
 
-def get_quantity(prompt: str, max_quantity: int) -> Optional[int]:
+def parse_quantity(quantity_str, max_quantity):
+    """Parse quantity input, accepting 'max', 'all', or a number."""
+    if not quantity_str:
+        return None
+    
+    # Check for max/all keywords (case-insensitive)
+    if quantity_str.lower() in ['max', 'all']:
+        return max_quantity
+    
+    # Try to parse as number
+    try:
+        quantity = int(quantity_str)
+        if quantity <= 0:
+            raise ValueError("Quantity must be greater than 0")
+        if quantity > max_quantity:
+            raise ValueError(f"Cannot exceed maximum quantity of {max_quantity}")
+        return quantity
+    except ValueError as e:
+        if "invalid literal for int()" in str(e):
+            raise ValueError("Please enter a number or 'max'/'all'")
+        raise
+
+def get_quantity(prompt, max_quantity):
     """
     Get a quantity from the user with validation.
     
@@ -108,19 +116,20 @@ def get_quantity(prompt: str, max_quantity: int) -> Optional[int]:
     Returns:
         int: The validated quantity, or None if cancelled
     """
-    def validate_quantity(value: str) -> int:
-        if value.lower() in ['max', 'all']:
+    while True:
+        quantity_str = custom_prompt(f"{prompt} (max {max_quantity}, 'max'/'all')")
+        if quantity_str is None:
+            return None
+            
+        if quantity_str.lower() in ['max', 'all']:
             return max_quantity
             
-        quantity = int(value)
-        if quantity <= 0:
-            raise ValueError("Quantity must be positive")
-        if quantity > max_quantity:
-            raise ValueError(f"Quantity cannot exceed {max_quantity}")
-        return quantity
-    
-    return get_input(
-        f"{prompt} (max {max_quantity}, 'max'/'all'",
-        validator=validate_quantity,
-        error_message="Please enter a valid number, 'max', 'all', or 'cancel'"
-    ) 
+        try:
+            quantity = int(quantity_str)
+            if quantity <= 0:
+                raise ValueError("Quantity must be positive")
+            if quantity > max_quantity:
+                raise ValueError(f"Quantity cannot exceed {max_quantity}")
+            return quantity
+        except ValueError as e:
+            console.print(f"[red]{str(e)}[/red]") 
