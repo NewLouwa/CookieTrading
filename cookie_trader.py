@@ -288,40 +288,69 @@ class CookieTrader:
             cursor.execute('SELECT id, ingredient, quantity, entry_price FROM positions WHERE id = ? AND status = "open"', (position_id,))
             return cursor.fetchone()
 
-    def simulate_close(self, position_id, exit_price):
-        """Simulate closing a position to see potential profit/loss."""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT ingredient, quantity, entry_price FROM positions WHERE id = ? AND status = "open"', (position_id,))
-            position = cursor.fetchone()
-            
-            if not position:
-                console.print(f"[red]No open position found with ID {position_id}[/red]")
-            else:
-                ingredient, total_quantity, entry_price = position
-                
-                # Ask for number of shares to simulate
-                sell_quantity = get_quantity("Enter number of shares to simulate", total_quantity)
-                if sell_quantity is None:
-                    console.print("[yellow]Operation cancelled[/yellow]")
-                    return
-                
-                gross_pl = (exit_price - entry_price) * sell_quantity
-                fee_percentage = self.get_current_fee()
-                fee_amount = abs(gross_pl) * (fee_percentage / 100)
-                net_pl = gross_pl - fee_amount
-                
-                pl_color = "green" if net_pl > 0 else "red"
-                pl_emoji = "📈" if net_pl > 0 else "📉"
-                output = f"\n[{pl_color}]{pl_emoji} Simulation Results:[/{pl_color}]"
-                output += f"\nPosition ID: {position_id}"
-                output += f"\nShares to Sell: {sell_quantity} of {total_quantity}"
-                output += f"\nHypothetical Exit Price: {format_price(exit_price)}"
-                output += f"\nPotential Gross P/L: {format_price(gross_pl)}"
-                output += f"\nFee: {format_price(fee_amount)} @ {fee_percentage}%"
-                output += f"\nPotential Net P/L: {format_price(net_pl)}"
-                console.print(output)
+    def simulate_close(self, position_id=None):
+        """
+        Simulate closing a position with a hypothetical exit price.
+        If position_id is provided, uses that position, otherwise prompts user.
+        """
+        if position_id is None:
+            self.show_open_positions()
+            position_id = custom_prompt("Enter position ID or ingredient code to simulate (or 'cancel' to exit)")
+            if position_id is None:
+                return
         
+        # Try to find position by ID or ingredient code
+        position = None
+        if position_id.isdigit():
+            position = self.get_position(int(position_id))
+        else:
+            # Try to find position by ingredient code
+            ingredient_code = position_id.upper()
+            positions = self.get_open_positions()
+            for pos in positions:
+                if pos['ingredient'] == ingredient_code:
+                    position = pos
+                    break
+        
+        if not position:
+            console.print("[red]Invalid position ID or ingredient code![/red]")
+            self.wait_for_user()
+            return
+            
+        # Get exit price
+        exit_price = custom_prompt("Enter exit price (or 'cancel' to exit)")
+        if exit_price is None:
+            return
+            
+        try:
+            exit_price = float(exit_price)
+        except ValueError:
+            console.print("[red]Invalid price! Please enter a number.[/red]")
+            self.wait_for_user()
+            return
+            
+        # Calculate P/L
+        entry_price = float(position['entry_price'])
+        quantity = position['quantity']
+        pl = (exit_price - entry_price) * quantity
+        fee = abs(pl * self.get_current_fee())
+        
+        # Build output string
+        output = f"""
+[bold]Simulating Position Close[/bold]
+
+Position Details:
+• Ingredient: {position['ingredient']} {position['ingredient']}
+• Quantity: {quantity} shares
+• Entry Price: ${entry_price:.2f}
+• Exit Price: ${exit_price:.2f}
+
+Trade Summary:
+• Potential P/L: ${pl:.2f}
+• Fee ({self.get_current_fee()*100:.0f}%): ${fee:.2f}
+• Net P/L: ${pl - fee:.2f}
+"""
+        console.print(output)
         self.wait_for_user()
 
     def show_open_positions(self):
@@ -564,250 +593,36 @@ class CookieTrader:
             console.print("[dim]Continuing automatically...[/dim]")
 
     def show_menu(self):
-        """
-        Display the main menu and handle user input.
-        
-        The menu is organized into logical sections:
-        - Position Management (green)
-        - Analysis Tools (blue)
-        - Settings & System (yellow)
-        
-        Each section is color-coded and uses emojis for better visual organization.
-        Note: The main menu is the only place where 'cancel' is not accepted.
-        """
+        """Display the main menu and handle user input."""
         while True:
-            console.clear()
-            
-            # Create title panel
-            title_panel = Panel(
-                "[bold cyan]Welcome to Cookie Trading Manager[/bold cyan]\n" +
-                "[dim]Your terminal-based trading companion[/dim]",
-                style="cyan"
-            )
-            console.print(title_panel)
-            
-            # Show dashboard at the top
+            self.clear_screen()
             self.show_dashboard()
+            self.show_menu_options()
             
-            # Create menu panel
-            menu_content = ""
-            
-            # Position Management (Green)
-            menu_content += "\n[bold green]📊 Position Management[/bold green]"
-            menu_content += "\n1. 📈 Open New Position"
-            menu_content += "\n2. 📉 Close Position"
-            menu_content += "\n3. 🔮 Simulate Position Close"
-            menu_content += "\n4. 🎯 Simulate Complete Trade"
-            
-            # Analysis Tools (Blue)
-            menu_content += "\n\n[bold blue]📈 Analysis Tools[/bold blue]"
-            menu_content += "\n5. 📋 View Open Positions"
-            menu_content += "\n6. 📜 Trading History"
-            
-            # Settings & System (Yellow)
-            menu_content += "\n\n[bold yellow]⚙️ Settings & System[/bold yellow]"
-            menu_content += "\n7. 👥 Update Traders Count"
-            menu_content += "\n[bold red]8. ❌ Exit Program[/bold red]"
-            
-            menu_panel = Panel(
-                menu_content,
-                title="[bold]Available Actions[/bold]",
-                border_style="cyan"
-            )
-            console.print(menu_panel)
-            
-            # Get user choice with validation (main menu doesn't accept cancel)
-            choice = Prompt.ask(
-                "\n[cyan]Select an option[/cyan]",
-                choices=["1", "2", "3", "4", "5", "6", "7", "8"],
-                show_choices=False
-            )
+            choice = Prompt.ask("\nSelect an option")
             
             if choice == "1":
-                # Create ingredient choices display string
-                ingredient_choices = "/".join(INGREDIENTS.keys())
-                ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
-                console.print(f"\nAvailable ingredients:\n{ingredient_display}")
-                
-                ingredient = custom_prompt(f"\nEnter ingredient code [{ingredient_choices}]")
-                if ingredient is None:
-                    continue
-                    
-                if ingredient.upper() not in INGREDIENTS:
-                    console.print("[red]Invalid ingredient code![/red]")
-                    continue
-                
-                quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
-                if quantity is None:
-                    continue
-                
-                # Handle price input
-                while True:
-                    try:
-                        price_str = custom_prompt("Enter entry price (e.g., 123.45 or $123.45)")
-                        if price_str is None:
-                            break
-                        price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str is None:
-                    continue
-                
-                # Get optional comment
-                comment = get_comment("Add a comment (optional, press Enter to skip)")
-                if comment is None:
-                    continue
-                
-                self.add_position(ingredient.upper(), quantity, price, comment)
-                
+                self.add_position()
             elif choice == "2":
-                self.show_open_positions()
-                position_input = custom_prompt("Enter position ID to close")
-                if position_input is None:
-                    continue
-                try:
-                    position_id = int(position_input)
-                except ValueError:
-                    console.print("[red]Invalid position ID![/red]")
-                    self.wait_for_user()
-                    continue
-                
-                # Handle exit price input
-                while True:
-                    try:
-                        price_str = custom_prompt("Enter exit price (e.g., 123.45 or $123.45)")
-                        if price_str is None:
-                            break
-                        exit_price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str is None:
-                    continue
-                
-                # Get optional comment
-                comment = get_comment("Add a comment (optional, press Enter to skip)")
-                if comment is None:
-                    continue
-                
-                self.close_position(position_id, exit_price, comment)
-                
+                self.close_position()
             elif choice == "3":
-                self.show_open_positions()
-                position_input = custom_prompt("Enter position ID to simulate")
-                if position_input is None:
-                    continue
-                try:
-                    position_id = int(position_input)
-                except ValueError:
-                    console.print("[red]Invalid position ID![/red]")
-                    self.wait_for_user()
-                    continue
-
-                # Handle hypothetical price input
-                while True:
-                    try:
-                        price_str = custom_prompt("Enter hypothetical exit price (e.g., 123.45 or $123.45)")
-                        if price_str is None:
-                            break
-                        exit_price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str is None:
-                    continue
-                
-                self.simulate_close(position_id, exit_price)
-                
+                self.simulate_close()
             elif choice == "4":
-                # Create ingredient choices display string
-                ingredient_choices = "/".join(INGREDIENTS.keys())
-                ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
-                console.print(f"\nAvailable ingredients:\n{ingredient_display}")
-                
-                ingredient = custom_prompt(f"\nEnter ingredient code [{ingredient_choices}]")
-                if ingredient is None:
-                    continue
-                    
-                if ingredient.upper() not in INGREDIENTS:
-                    console.print("[red]Invalid ingredient code![/red]")
-                    continue
-                
-                quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
-                if quantity is None:
-                    continue
-                
-                # Handle entry price input
-                while True:
-                    try:
-                        price_str = custom_prompt("Enter entry price (e.g., 123.45 or $123.45)")
-                        if price_str is None:
-                            break
-                        entry_price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str is None:
-                    continue
-                
-                # Handle exit price input
-                while True:
-                    try:
-                        price_str = custom_prompt("Enter hypothetical exit price (e.g., 123.45 or $123.45)")
-                        if price_str is None:
-                            break
-                        exit_price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str is None:
-                    continue
-                
-                self.simulate_trade(ingredient.upper(), quantity, entry_price, exit_price)
-                
+                self.simulate_trade()
             elif choice == "5":
                 self.show_open_positions()
-                
+                self.wait_for_user()
             elif choice == "6":
                 self.show_trading_history()
-                
+                self.wait_for_user()
             elif choice == "7":
-                while True:
-                    try:
-                        count_input = custom_prompt("Enter new trader count")
-                        if count_input is None:
-                            break
-                        count = int(count_input)
-                        if count < 0:
-                            raise ValueError("Trader count cannot be negative")
-                        self.update_traders(count)
-                        break
-                    except ValueError as e:
-                        console.print(f"[red]Invalid trader count: {str(e)}[/red]")
-                        self.wait_for_user()
-                
-                if count_input is None:
-                    continue
-                
+                self.update_traders()
             elif choice == "8":
-                console.print("[red]Goodbye! 👋[/red]")
+                console.print("\n[yellow]Thank you for using Cookie Trading Manager![/yellow]")
                 break
+            else:
+                console.print("[red]Invalid option![/red]")
+                self.wait_for_user()
 
 if __name__ == "__main__":
     trader = CookieTrader()
