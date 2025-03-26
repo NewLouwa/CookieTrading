@@ -557,16 +557,29 @@ class CookieTrader:
                 
             elif choice == "3":
                 self.show_open_positions()
-                position_id = int(Prompt.ask("Enter position ID to simulate"))
-                
+                position_input = Prompt.ask("Enter position ID to simulate (or 'cancel' to exit)")
+                if position_input.lower() == 'cancel':
+                    continue
+                try:
+                    position_id = int(position_input)
+                except ValueError:
+                    console.print("[red]Invalid position ID![/red]")
+                    self.wait_for_user()
+                    continue
+
                 # Handle hypothetical price input
                 while True:
                     try:
-                        price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45)")
+                        price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
+                        if price_str.lower() == 'cancel':
+                            break
                         exit_price = parse_price(price_str)
                         break
                     except ValueError as e:
                         console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str.lower() == 'cancel':
+                    continue
                 
                 self.simulate_close(position_id, exit_price)
                 
@@ -625,8 +638,22 @@ class CookieTrader:
                 self.show_trading_history()
                 
             elif choice == "7":
-                count = int(Prompt.ask("Enter new trader count"))
-                self.update_traders(count)
+                while True:
+                    try:
+                        count_input = Prompt.ask("Enter new trader count (or 'cancel' to exit)")
+                        if count_input.lower() == 'cancel':
+                            break
+                        count = int(count_input)
+                        if count < 0:
+                            raise ValueError("Trader count cannot be negative")
+                        self.update_traders(count)
+                        break
+                    except ValueError as e:
+                        console.print(f"[red]Invalid trader count: {str(e)}[/red]")
+                        self.wait_for_user()
+                
+                if count_input.lower() == 'cancel':
+                    continue
                 
             elif choice == "8":
                 console.print("[red]Goodbye! 👋[/red]")
