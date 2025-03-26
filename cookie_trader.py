@@ -576,9 +576,80 @@ Trade Summary:
             choice = Prompt.ask("\nSelect an option")
             
             if choice == "1":
-                self.add_position()
+                # Create ingredient choices display string
+                ingredient_choices = "/".join(INGREDIENTS.keys())
+                ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
+                console.print(f"\nAvailable ingredients:\n{ingredient_display}")
+                
+                ingredient = custom_prompt(f"\nEnter ingredient code [{ingredient_choices}]")
+                if ingredient is None:
+                    continue
+                    
+                if ingredient.upper() not in INGREDIENTS:
+                    console.print("[red]Invalid ingredient code![/red]")
+                    continue
+                
+                quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
+                if quantity is None:
+                    continue
+                
+                # Handle price input
+                while True:
+                    try:
+                        price_str = custom_prompt("Enter entry price (e.g., 123.45 or $123.45)")
+                        if price_str is None:
+                            break
+                        price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            break
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str is None:
+                    continue
+                
+                # Get optional comment
+                comment = get_comment("Add a comment (optional, press Enter to skip)")
+                if comment is None:
+                    continue
+                
+                self.add_position(ingredient.upper(), quantity, price, comment)
+                
             elif choice == "2":
-                self.close_position()
+                self.show_portfolio()
+                ingredient = custom_prompt("Enter ingredient code to close (or 'cancel' to exit)")
+                if ingredient is None:
+                    continue
+                    
+                if ingredient.upper() not in INGREDIENTS:
+                    console.print("[red]Invalid ingredient code![/red]")
+                    self.wait_for_user()
+                    continue
+                
+                # Handle exit price input
+                while True:
+                    try:
+                        price_str = custom_prompt("Enter exit price (e.g., 123.45 or $123.45)")
+                        if price_str is None:
+                            break
+                        exit_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            break
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str is None:
+                    continue
+                
+                # Get optional comment
+                comment = get_comment("Add a comment (optional, press Enter to skip)")
+                if comment is None:
+                    continue
+                
+                self.close_position(ingredient.upper(), exit_price, comment)
+                
             elif choice == "3":
                 self.simulate_close()
             elif choice == "4":
