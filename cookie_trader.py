@@ -566,10 +566,42 @@ Trade Summary:
         """Wait for user to press Enter before continuing."""
         Prompt.ask("\nPress Enter to continue", default="")
 
+    def sync_portfolio(self):
+        """
+        Synchronize the portfolio table with the positions table.
+        This ensures the portfolio reflects the actual holdings based on all orders.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Clear the portfolio table
+            cursor.execute('DELETE FROM portfolio')
+            
+            # Calculate current holdings from positions
+            cursor.execute('''
+                SELECT 
+                    ingredient,
+                    SUM(CASE WHEN status = 'open' THEN quantity ELSE 0 END) as total_quantity,
+                    AVG(CASE WHEN status = 'open' THEN entry_price ELSE NULL END) as average_price
+                FROM positions
+                GROUP BY ingredient
+                HAVING total_quantity > 0
+            ''')
+            
+            # Insert or update portfolio entries
+            for ingredient, quantity, avg_price in cursor.fetchall():
+                cursor.execute('''
+                    INSERT INTO portfolio (ingredient, total_quantity, average_price)
+                    VALUES (?, ?, ?)
+                ''', (ingredient, quantity, avg_price))
+            
+            conn.commit()
+
     def show_menu(self):
         """Display the main menu and handle user input."""
         while True:
             self.clear_screen()
+            self.sync_portfolio()  # Sync portfolio before showing dashboard
             self.show_dashboard()
             self.show_menu_options()
             
