@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+"""
+Cookie Trading Manager - A terminal-based trading simulation application.
+
+This application provides a user-friendly interface for managing trading positions
+of various cookie ingredients. It features real-time profit/loss calculation,
+position tracking, and a dynamic fee system based on the number of traders.
+
+Key features:
+- Position management (open, close, simulate)
+- Real-time trading dashboard
+- Dynamic fee calculation
+- Trading history tracking
+- Beautiful terminal UI using Rich library
+"""
+
 import sqlite3
 import os
 from datetime import datetime
@@ -11,10 +26,10 @@ import re
 from rich.panel import Panel
 from src.utils.formatting import parse_price, format_price, get_comment, get_quantity
 
-# Initialize Rich console
+# Initialize Rich console for beautiful terminal output
 console = Console()
 
-# Constants
+# Dictionary mapping ingredient codes to their names and emojis
 INGREDIENTS = {
     'CRL': 'Cereal 🌾',
     'CHC': 'Chocolate 🍫',
@@ -26,13 +41,14 @@ INGREDIENTS = {
     'OEUF': 'Eggs 🥚'
 }
 
-# Trade status emojis
+# Emojis for trade status visualization
 TRADE_EMOJIS = {
     'profit': '📈',
     'loss': '📉',
     'neutral': '➡️'
 }
 
+# Fee calculation constants
 BASE_FEE = 20  # Base fee percentage
 FEE_REDUCTION_PER_TRADER = 1  # Fee reduction percentage per trader
 
@@ -49,17 +65,35 @@ def show_available_units():
     console.print(table)
 
 class CookieTrader:
+    """
+    Main class handling all trading operations and user interface.
+    
+    This class manages:
+    - Database operations
+    - Position tracking
+    - Trade execution
+    - Fee calculations
+    - User interface
+    """
+
     def __init__(self):
-        """Initialize the CookieTrader with database."""
+        """Initialize the CookieTrader with database connection."""
         self.db_path = 'trading.db'
         self.setup_database()
         
     def setup_database(self):
-        """Initialize the database with required tables."""
+        """
+        Initialize the database with required tables.
+        
+        Creates the following tables if they don't exist:
+        - traders: Stores the number of traders and last update time
+        - positions: Stores open and closed trading positions
+        - trading_history: Stores completed trades with P/L information
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Create traders table
+            # Create traders table for fee calculation
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS traders (
                     count INTEGER DEFAULT 0,
@@ -67,7 +101,7 @@ class CookieTrader:
                 )
             ''')
             
-            # Create positions table
+            # Create positions table for tracking trades
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS positions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +115,7 @@ class CookieTrader:
                 )
             ''')
             
-            # Create trading history table
+            # Create trading history for completed trades
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS trading_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,7 +130,7 @@ class CookieTrader:
                 )
             ''')
             
-            # Initialize traders table if empty
+            # Initialize traders count if table is empty
             cursor.execute('SELECT COUNT(*) FROM traders')
             if cursor.fetchone()[0] == 0:
                 cursor.execute('INSERT INTO traders (count) VALUES (0)')
@@ -104,7 +138,15 @@ class CookieTrader:
             conn.commit()
 
     def get_current_fee(self):
-        """Calculate current fee percentage based on number of traders."""
+        """
+        Calculate the current trading fee percentage based on number of traders.
+        
+        The fee starts at BASE_FEE and is reduced by FEE_REDUCTION_PER_TRADER
+        for each trader, but cannot go below 0%.
+        
+        Returns:
+            float: The current fee percentage
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT count FROM traders')
@@ -121,7 +163,15 @@ class CookieTrader:
         return ""
 
     def add_position(self, ingredient, quantity, price, comment=""):
-        """Add a new trading position."""
+        """
+        Add a new trading position to the database.
+        
+        Args:
+            ingredient (str): The ingredient code (must exist in INGREDIENTS)
+            quantity (int): Number of shares to buy
+            price (float): Entry price per share
+            comment (str, optional): Optional comment about the trade
+        """
         if ingredient not in INGREDIENTS:
             console.print(f"[red]Invalid ingredient code: {ingredient}[/red]")
             return
@@ -134,6 +184,7 @@ class CookieTrader:
             ''', (ingredient, quantity, price, comment))
             conn.commit()
             
+        # Display success message with trade details
         output = f"\n[green]📈 Position Opened:[/green]"
         output += f"\nIngredient: {quantity} {INGREDIENTS[ingredient]}"
         output += f"\nEntry Price: {format_price(price)}"
@@ -142,7 +193,20 @@ class CookieTrader:
         console.print(output)
 
     def close_position(self, position_id, exit_price, comment=""):
-        """Close an existing position."""
+        """
+        Close an existing position or reduce its quantity.
+        
+        Args:
+            position_id (int): ID of the position to close
+            exit_price (float): Exit price per share
+            comment (str, optional): Optional comment about the closing trade
+            
+        The method supports:
+        - Partial position closing
+        - Full position closing
+        - P/L calculation with fees
+        - Trading history recording
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
