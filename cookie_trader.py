@@ -524,32 +524,63 @@ class CookieTrader:
         Prompt.ask("\nPress Enter to continue", default="")
 
     def show_menu(self):
-        """Display the main menu and handle user input."""
+        """
+        Display the main menu and handle user input.
+        
+        The menu is organized into logical sections:
+        - Position Management (green)
+        - Analysis Tools (blue)
+        - Settings & System (yellow)
+        
+        Each section is color-coded and uses emojis for better visual organization.
+        """
         while True:
             console.clear()
-            console.print("[bold cyan]🍪 Cookie Trading Manager[/bold cyan]")
+            
+            # Create title panel
+            title_panel = Panel(
+                "[bold cyan]Welcome to Cookie Trading Manager[/bold cyan]\n" +
+                "[dim]Your terminal-based trading companion[/dim]",
+                style="cyan"
+            )
+            console.print(title_panel)
             
             # Show dashboard at the top
             self.show_dashboard()
             
-            # Position Actions (Green)
-            console.print("\n[bold green]Position Actions[/bold green]")
-            console.print("1. 📈 Open Position")
-            console.print("2. 📉 Close Position")
-            console.print("3. 🔮 Simulate Close")
-            console.print("4. 🎯 Simulate Trade")
+            # Create menu panel
+            menu_content = ""
             
-            # View Actions (Blue)
-            console.print("\n[bold blue]View Actions[/bold blue]")
-            console.print("5. 📊 Show Open Positions")
-            console.print("6. 📜 Show Trading History")
+            # Position Management (Green)
+            menu_content += "\n[bold green]📊 Position Management[/bold green]"
+            menu_content += "\n1. 📈 Open New Position"
+            menu_content += "\n2. 📉 Close Position"
+            menu_content += "\n3. 🔮 Simulate Position Close"
+            menu_content += "\n4. 🎯 Simulate Complete Trade"
             
-            # Settings & Exit (Yellow/Red)
-            console.print("\n[bold yellow]Settings & Exit[/bold yellow]")
-            console.print("7. 👥 Update Traders Count")
-            console.print("[bold red]8. ❌ Exit[/bold red]")
+            # Analysis Tools (Blue)
+            menu_content += "\n\n[bold blue]📈 Analysis Tools[/bold blue]"
+            menu_content += "\n5. 📋 View Open Positions"
+            menu_content += "\n6. 📜 Trading History"
             
-            choice = Prompt.ask("\nSelect an option (or 'cancel' to exit current operation)", choices=["1", "2", "3", "4", "5", "6", "7", "8", "cancel"])
+            # Settings & System (Yellow)
+            menu_content += "\n\n[bold yellow]⚙️ Settings & System[/bold yellow]"
+            menu_content += "\n7. 👥 Update Traders Count"
+            menu_content += "\n[bold red]8. ❌ Exit Program[/bold red]"
+            
+            menu_panel = Panel(
+                menu_content,
+                title="[bold]Available Actions[/bold]",
+                border_style="cyan"
+            )
+            console.print(menu_panel)
+            
+            # Get user choice with validation
+            choice = Prompt.ask(
+                "\n[cyan]Select an option[/cyan]",
+                choices=["1", "2", "3", "4", "5", "6", "7", "8", "cancel"],
+                show_choices=False
+            )
             
             if choice.lower() == 'cancel':
                 continue
