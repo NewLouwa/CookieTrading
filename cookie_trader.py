@@ -9,6 +9,7 @@ from rich.prompt import Prompt, Confirm
 import emoji
 import re
 from rich.panel import Panel
+from src.utils.formatting import parse_price, format_price, get_comment, get_quantity
 
 # Initialize Rich console
 console = Console()
@@ -46,24 +47,6 @@ def show_available_units():
         table.add_row(code, name, power)
     
     console.print(table)
-
-def parse_price(price_str):
-    """Convert a price string to a float value."""
-    price_str = price_str.strip().replace('$', '').strip()
-    if not price_str:
-        return 0.0
-    
-    try:
-        return float(price_str)
-    except ValueError:
-        raise ValueError("Invalid price format. Enter a number (e.g., 123.45 or $123.45)")
-
-def format_price(price):
-    """Format a number into game currency format."""
-    if price == 0:
-        return "$0.00"
-    
-    return f"${abs(price):.2f}"
 
 class CookieTrader:
     def __init__(self):
@@ -584,30 +567,46 @@ class CookieTrader:
                 ingredient_choices = "/".join(INGREDIENTS.keys())
                 ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
                 console.print(f"\nAvailable ingredients:\n{ingredient_display}")
-                ingredient = Prompt.ask(f"\nEnter ingredient code [{ingredient_choices}]")
+                
+                ingredient = Prompt.ask(f"\nEnter ingredient code [{ingredient_choices}] (or 'cancel' to exit)")
+                if ingredient.lower() == 'cancel':
+                    continue
+                    
                 if ingredient.upper() not in INGREDIENTS:
                     console.print("[red]Invalid ingredient code![/red]")
                     continue
                 
-                quantity = int(Prompt.ask("Enter number of shares"))
+                quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
+                if quantity is None:
+                    continue
                 
                 # Handle entry price input
                 while True:
                     try:
-                        price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45)")
+                        price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
+                        if price_str.lower() == 'cancel':
+                            break
                         entry_price = parse_price(price_str)
                         break
                     except ValueError as e:
                         console.print(f"[red]{str(e)}[/red]")
                 
+                if price_str.lower() == 'cancel':
+                    continue
+                
                 # Handle exit price input
                 while True:
                     try:
-                        price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45)")
+                        price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
+                        if price_str.lower() == 'cancel':
+                            break
                         exit_price = parse_price(price_str)
                         break
                     except ValueError as e:
                         console.print(f"[red]{str(e)}[/red]")
+                
+                if price_str.lower() == 'cancel':
+                    continue
                 
                 self.simulate_trade(ingredient.upper(), quantity, entry_price, exit_price)
                 
