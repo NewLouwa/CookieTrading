@@ -151,7 +151,12 @@ class CookieTrader:
             ''', (ingredient, quantity, price, comment))
             conn.commit()
             
-        console.print(f"[green]Added position: {quantity} {INGREDIENTS[ingredient]} at {format_price(price)}[/green]")
+        output = f"\n[green]📈 Position Opened:[/green]"
+        output += f"\nIngredient: {quantity} {INGREDIENTS[ingredient]}"
+        output += f"\nEntry Price: {format_price(price)}"
+        if comment:
+            output += f"\nComment: {comment}"
+        console.print(output)
 
     def close_position(self, position_id, exit_price, comment=""):
         """Close an existing position."""
@@ -166,25 +171,49 @@ class CookieTrader:
                 console.print(f"[red]No open position found with ID {position_id}[/red]")
                 return
             
-            ingredient, quantity, entry_price, status = position
+            ingredient, total_quantity, entry_price, status = position
             
             if status == 'closed':
                 console.print(f"[red]Position {position_id} is already closed![/red]")
                 return
             
+            # Ask for number of shares to sell
+            while True:
+                try:
+                    sell_quantity = int(Prompt.ask(f"Enter number of shares to sell (max {total_quantity})"))
+                    if sell_quantity <= 0:
+                        console.print("[red]Quantity must be greater than 0![/red]")
+                        continue
+                    if sell_quantity > total_quantity:
+                        console.print(f"[red]Cannot sell more shares than you have! Maximum available: {total_quantity}[/red]")
+                        continue
+                    break
+                except ValueError:
+                    console.print("[red]Please enter a valid number![/red]")
+            
             # Calculate profit/loss
-            gross_pl = (exit_price - entry_price) * quantity
+            gross_pl = (exit_price - entry_price) * sell_quantity
             fee_percentage = self.get_current_fee()
             fee_amount = abs(gross_pl) * (fee_percentage / 100)
             net_pl = gross_pl - fee_amount
             
             # Update position status
-            cursor.execute('''
-                UPDATE positions 
-                SET status = 'closed',
-                    last_updated = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (position_id,))
+            if sell_quantity == total_quantity:
+                # Close the entire position
+                cursor.execute('''
+                    UPDATE positions 
+                    SET status = 'closed',
+                        last_updated = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (position_id,))
+            else:
+                # Update the remaining quantity
+                cursor.execute('''
+                    UPDATE positions 
+                    SET quantity = quantity - ?,
+                        last_updated = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (sell_quantity, position_id))
             
             # Record in history
             cursor.execute('''
@@ -196,8 +225,17 @@ class CookieTrader:
             conn.commit()
             
         pl_color = "green" if net_pl > 0 else "red"
-        console.print(f"[{pl_color}]Closed position {position_id}:")
-        console.print(f"Profit/Loss: {format_price(net_pl)} (Fee: {format_price(fee_amount)} @ {fee_percentage}%)[/{pl_color}]")
+        pl_emoji = "📈" if net_pl > 0 else "📉"
+        output = f"\n[{pl_color}]{pl_emoji} Position Closed:[/{pl_color}]"
+        output += f"\nPosition ID: {position_id}"
+        output += f"\nShares Sold: {sell_quantity} of {total_quantity}"
+        output += f"\nExit Price: {format_price(exit_price)}"
+        output += f"\nGross P/L: {format_price(gross_pl)}"
+        output += f"\nFee: {format_price(fee_amount)} @ {fee_percentage}%"
+        output += f"\nNet P/L: {format_price(net_pl)}"
+        if comment:
+            output += f"\nComment: {comment}"
+        console.print(output)
 
     def get_position(self, position_id):
         """Get a position by ID."""
@@ -216,18 +254,37 @@ class CookieTrader:
             if not position:
                 console.print(f"[red]No open position found with ID {position_id}[/red]")
             else:
-                ingredient, quantity, entry_price = position
+                ingredient, total_quantity, entry_price = position
                 
-                gross_pl = (exit_price - entry_price) * quantity
+                # Ask for number of shares to simulate
+                while True:
+                    try:
+                        sell_quantity = int(Prompt.ask(f"Enter number of shares to simulate (max {total_quantity})"))
+                        if sell_quantity <= 0:
+                            console.print("[red]Quantity must be greater than 0![/red]")
+                            continue
+                        if sell_quantity > total_quantity:
+                            console.print(f"[red]Cannot simulate more shares than you have! Maximum available: {total_quantity}[/red]")
+                            continue
+                        break
+                    except ValueError:
+                        console.print("[red]Please enter a valid number![/red]")
+                
+                gross_pl = (exit_price - entry_price) * sell_quantity
                 fee_percentage = self.get_current_fee()
                 fee_amount = abs(gross_pl) * (fee_percentage / 100)
                 net_pl = gross_pl - fee_amount
                 
                 pl_color = "green" if net_pl > 0 else "red"
-                console.print(f"\n[{pl_color}]Simulation for position {position_id}:")
-                console.print(f"Potential Profit/Loss: {format_price(gross_pl)}")
-                console.print(f"Fee: {format_price(fee_amount)} @ {fee_percentage}%")
-                console.print(f"Net P/L after fees: {format_price(net_pl)}[/{pl_color}]")
+                pl_emoji = "📈" if net_pl > 0 else "📉"
+                output = f"\n[{pl_color}]{pl_emoji} Simulation Results:[/{pl_color}]"
+                output += f"\nPosition ID: {position_id}"
+                output += f"\nShares to Sell: {sell_quantity} of {total_quantity}"
+                output += f"\nHypothetical Exit Price: {format_price(exit_price)}"
+                output += f"\nPotential Gross P/L: {format_price(gross_pl)}"
+                output += f"\nFee: {format_price(fee_amount)} @ {fee_percentage}%"
+                output += f"\nPotential Net P/L: {format_price(net_pl)}"
+                console.print(output)
         
         self.wait_for_user()
 
@@ -419,13 +476,15 @@ class CookieTrader:
             net_pl = gross_pl - fee_amount
             
             pl_color = "green" if net_pl > 0 else "red"
-            console.print(f"\n[{pl_color}]Trade Simulation:")
-            console.print(f"Ingredient: {quantity} {INGREDIENTS[ingredient]}")
-            console.print(f"Entry Price: {format_price(entry_price)}")
-            console.print(f"Exit Price: {format_price(exit_price)}")
-            console.print(f"Potential Profit/Loss: {format_price(gross_pl)}")
-            console.print(f"Fee: {format_price(fee_amount)} @ {fee_percentage}%")
-            console.print(f"Net P/L after fees: {format_price(net_pl)}[/{pl_color}]")
+            pl_emoji = "📈" if net_pl > 0 else "📉"
+            output = f"\n[{pl_color}]{pl_emoji} Trade Simulation:[/{pl_color}]"
+            output += f"\nIngredient: {quantity} {INGREDIENTS[ingredient]}"
+            output += f"\nEntry Price: {format_price(entry_price)}"
+            output += f"\nExit Price: {format_price(exit_price)}"
+            output += f"\nPotential Gross P/L: {format_price(gross_pl)}"
+            output += f"\nFee: {format_price(fee_amount)} @ {fee_percentage}%"
+            output += f"\nPotential Net P/L: {format_price(net_pl)}"
+            console.print(output)
         
         self.wait_for_user()
 
@@ -442,14 +501,22 @@ class CookieTrader:
             # Show dashboard at the top
             self.show_dashboard()
             
-            console.print("\n1. 📈 Add Position")
+            # Position Actions (Green)
+            console.print("\n[bold green]Position Actions[/bold green]")
+            console.print("1. 📈 Open Position")
             console.print("2. 📉 Close Position")
             console.print("3. 🔮 Simulate Close")
-            console.print("4. 📊 Show Open Positions")
-            console.print("5. 📜 Show Trading History")
-            console.print("6. 👥 Update Traders Count")
-            console.print("7. 🎯 Simulate Trade")
-            console.print("8. ❌ Exit")
+            console.print("4. 🎯 Simulate Trade")
+            
+            # View Actions (Blue)
+            console.print("\n[bold blue]View Actions[/bold blue]")
+            console.print("5. 📊 Show Open Positions")
+            console.print("6. 📜 Show Trading History")
+            
+            # Settings & Exit (Yellow/Red)
+            console.print("\n[bold yellow]Settings & Exit[/bold yellow]")
+            console.print("7. 👥 Update Traders Count")
+            console.print("[bold red]8. ❌ Exit[/bold red]")
             
             choice = Prompt.ask("\nSelect an option", choices=["1", "2", "3", "4", "5", "6", "7", "8"])
             
@@ -462,7 +529,7 @@ class CookieTrader:
                 if ingredient.upper() not in INGREDIENTS:
                     console.print("[red]Invalid ingredient code![/red]")
                     continue
-                quantity = int(Prompt.ask("Enter quantity"))
+                quantity = int(Prompt.ask("Enter number of shares"))
                 
                 # Handle price input
                 while True:
@@ -512,16 +579,6 @@ class CookieTrader:
                 self.simulate_close(position_id, exit_price)
                 
             elif choice == "4":
-                self.show_open_positions()
-                
-            elif choice == "5":
-                self.show_trading_history()
-                
-            elif choice == "6":
-                count = int(Prompt.ask("Enter new trader count"))
-                self.update_traders(count)
-                
-            elif choice == "7":
                 # Create ingredient choices display string
                 ingredient_choices = "/".join(INGREDIENTS.keys())
                 ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
@@ -531,7 +588,7 @@ class CookieTrader:
                     console.print("[red]Invalid ingredient code![/red]")
                     continue
                 
-                quantity = int(Prompt.ask("Enter quantity"))
+                quantity = int(Prompt.ask("Enter number of shares"))
                 
                 # Handle entry price input
                 while True:
@@ -553,8 +610,18 @@ class CookieTrader:
                 
                 self.simulate_trade(ingredient.upper(), quantity, entry_price, exit_price)
                 
+            elif choice == "5":
+                self.show_open_positions()
+                
+            elif choice == "6":
+                self.show_trading_history()
+                
+            elif choice == "7":
+                count = int(Prompt.ask("Enter new trader count"))
+                self.update_traders(count)
+                
             elif choice == "8":
-                console.print("[yellow]Goodbye! 👋[/yellow]")
+                console.print("[red]Goodbye! 👋[/red]")
                 break
 
 if __name__ == "__main__":

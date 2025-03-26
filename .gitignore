@@ -36,4 +36,22 @@ ENV/
 .idea/
 .vscode/
 *.swp
-*.swo 
+*.swo
+
+# Project specific
+trading.db
+test_trading.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/ 
