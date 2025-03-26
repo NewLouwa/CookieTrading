@@ -7,6 +7,8 @@ from rich.table import Table
 from rich import box
 from rich.prompt import Prompt, Confirm
 import emoji
+import re
+from rich.panel import Panel
 
 # Initialize Rich console
 console = Console()
@@ -16,7 +18,7 @@ INGREDIENTS = {
     'CRL': 'Cereal 🌾',
     'CHC': 'Chocolate 🍫',
     'BTR': 'Butter 🧈',
-    'SCR': 'Sugar 🧂',
+    'SUC': 'Sugar 🧂',
     'NOI': 'Walnut 🥜',
     'SEL': 'Salt 🧂',
     'VNL': 'Vanilla 🍶',
@@ -33,20 +35,52 @@ TRADE_EMOJIS = {
 BASE_FEE = 20  # Base fee percentage
 FEE_REDUCTION_PER_TRADER = 1  # Fee reduction percentage per trader
 
+def show_available_units():
+    """Display available units in a formatted table."""
+    table = Table(title="Available Units 📏", box=box.ROUNDED)
+    table.add_column("Code", style="cyan", justify="right")
+    table.add_column("Name", style="green")
+    table.add_column("Power", style="yellow")
+    
+    for code, (_, name, power) in UNIT_MULTIPLIERS.items():
+        table.add_row(code, name, power)
+    
+    console.print(table)
+
+def parse_price(price_str):
+    """Convert a price string to a float value."""
+    price_str = price_str.strip().replace('$', '').strip()
+    if not price_str:
+        return 0.0
+    
+    try:
+        return float(price_str)
+    except ValueError:
+        raise ValueError("Invalid price format. Enter a number (e.g., 123.45 or $123.45)")
+
+def format_price(price):
+    """Format a number into game currency format."""
+    if price == 0:
+        return "$0.00"
+    
+    return f"${abs(price):.2f}"
+
 class CookieTrader:
     def __init__(self):
-        self.db_path = 'cookie_trading.db'
+        """Initialize the CookieTrader with database."""
+        self.db_path = 'trading.db'
         self.setup_database()
         
     def setup_database(self):
-        """Initialize the SQLite database with required tables."""
+        """Initialize the database with required tables."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
             # Create traders table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS traders (
-                    count INTEGER DEFAULT 0
+                    count INTEGER DEFAULT 0,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
@@ -58,11 +92,13 @@ class CookieTrader:
                     quantity INTEGER NOT NULL,
                     entry_price REAL NOT NULL,
                     entry_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    status TEXT DEFAULT 'open'
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status TEXT DEFAULT 'open',
+                    comment TEXT
                 )
             ''')
             
-            # Create history table
+            # Create trading history table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS trading_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,13 +108,14 @@ class CookieTrader:
                     fee_percentage REAL,
                     fee_amount REAL,
                     exit_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    comment TEXT,
                     FOREIGN KEY (position_id) REFERENCES positions (id)
                 )
             ''')
             
-            # Initialize traders count if not exists
-            cursor.execute('SELECT count FROM traders')
-            if not cursor.fetchone():
+            # Initialize traders table if empty
+            cursor.execute('SELECT COUNT(*) FROM traders')
+            if cursor.fetchone()[0] == 0:
                 cursor.execute('INSERT INTO traders (count) VALUES (0)')
             
             conn.commit()
@@ -93,7 +130,14 @@ class CookieTrader:
         fee = max(0, BASE_FEE - (trader_count * FEE_REDUCTION_PER_TRADER))
         return fee
 
-    def add_position(self, ingredient, quantity, price):
+    def get_comment(self, prompt_text):
+        """Get optional comment from user."""
+        comment = Prompt.ask(prompt_text, default="")
+        if comment:
+            return comment[:500]  # Limit to 500 chars
+        return ""
+
+    def add_position(self, ingredient, quantity, price, comment=""):
         """Add a new trading position."""
         if ingredient not in INGREDIENTS:
             console.print(f"[red]Invalid ingredient code: {ingredient}[/red]")
@@ -102,47 +146,58 @@ class CookieTrader:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO positions (ingredient, quantity, entry_price)
-                VALUES (?, ?, ?)
-            ''', (ingredient, quantity, price))
+                INSERT INTO positions (ingredient, quantity, entry_price, comment)
+                VALUES (?, ?, ?, ?)
+            ''', (ingredient, quantity, price, comment))
             conn.commit()
             
-        console.print(f"[green]Added position: {quantity} {INGREDIENTS[ingredient]} at {price}[/green]")
+        console.print(f"[green]Added position: {quantity} {INGREDIENTS[ingredient]} at {format_price(price)}[/green]")
 
-    def close_position(self, position_id, exit_price):
+    def close_position(self, position_id, exit_price, comment=""):
         """Close an existing position."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
             # Get position details
-            cursor.execute('SELECT ingredient, quantity, entry_price FROM positions WHERE id = ? AND status = "open"', (position_id,))
+            cursor.execute('SELECT ingredient, quantity, entry_price, status FROM positions WHERE id = ?', (position_id,))
             position = cursor.fetchone()
             
             if not position:
                 console.print(f"[red]No open position found with ID {position_id}[/red]")
                 return
             
-            ingredient, quantity, entry_price = position
-            fee_percentage = self.get_current_fee()
+            ingredient, quantity, entry_price, status = position
+            
+            if status == 'closed':
+                console.print(f"[red]Position {position_id} is already closed![/red]")
+                return
             
             # Calculate profit/loss
             gross_pl = (exit_price - entry_price) * quantity
+            fee_percentage = self.get_current_fee()
             fee_amount = abs(gross_pl) * (fee_percentage / 100)
             net_pl = gross_pl - fee_amount
             
+            # Update position status
+            cursor.execute('''
+                UPDATE positions 
+                SET status = 'closed',
+                    last_updated = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (position_id,))
+            
             # Record in history
             cursor.execute('''
-                INSERT INTO trading_history (position_id, exit_price, profit_loss, fee_percentage, fee_amount)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (position_id, exit_price, net_pl, fee_percentage, fee_amount))
+                INSERT INTO trading_history 
+                (position_id, exit_price, profit_loss, fee_percentage, fee_amount, comment)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (position_id, exit_price, net_pl, fee_percentage, fee_amount, comment))
             
-            # Update position status
-            cursor.execute('UPDATE positions SET status = "closed" WHERE id = ?', (position_id,))
             conn.commit()
             
         pl_color = "green" if net_pl > 0 else "red"
         console.print(f"[{pl_color}]Closed position {position_id}:")
-        console.print(f"Profit/Loss: {net_pl:.2f} (Fee: {fee_amount:.2f} @ {fee_percentage}%)[/{pl_color}]")
+        console.print(f"Profit/Loss: {format_price(net_pl)} (Fee: {format_price(fee_amount)} @ {fee_percentage}%)[/{pl_color}]")
 
     def simulate_close(self, position_id, exit_price):
         """Simulate closing a position to see potential profit/loss."""
@@ -164,33 +219,44 @@ class CookieTrader:
             
             pl_color = "green" if net_pl > 0 else "red"
             console.print(f"\n[yellow]Simulation for position {position_id}:[/yellow]")
-            console.print(f"[{pl_color}]Potential Profit/Loss: {net_pl:.2f}")
-            console.print(f"Fee: {fee_amount:.2f} @ {fee_percentage}%[/{pl_color}]")
+            console.print(f"[{pl_color}]Potential Profit/Loss: {format_price(net_pl)}")
+            console.print(f"Fee: {format_price(fee_amount)} @ {fee_percentage}%[/{pl_color}]")
 
     def show_open_positions(self):
-        """Display all open positions in a table."""
+        """Display all open positions."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT id, ingredient, quantity, entry_price, entry_date FROM positions WHERE status = "open"')
+            cursor.execute('''
+                SELECT id, ingredient, quantity, entry_price, entry_date, comment
+                FROM positions 
+                WHERE status = 'open'
+                ORDER BY entry_date DESC
+            ''')
             positions = cursor.fetchall()
             
-        table = Table(title="Open Positions", box=box.ROUNDED)
-        table.add_column("ID", justify="right", style="cyan")
-        table.add_column("Ingredient", style="magenta")
-        table.add_column("Quantity", justify="right", style="green")
-        table.add_column("Entry Price", justify="right", style="yellow")
-        table.add_column("Entry Date", style="blue")
-        
-        for pos in positions:
-            table.add_row(
-                str(pos[0]),
-                f"{INGREDIENTS[pos[1]]}",
-                str(pos[2]),
-                f"{pos[3]:.2f}",
-                pos[4]
-            )
-        
-        console.print(table)
+            if not positions:
+                console.print("[yellow]No open positions[/yellow]")
+                return
+            
+            table = Table(title="Open Positions", box=box.ROUNDED)
+            table.add_column("ID", justify="right", style="cyan")
+            table.add_column("Ingredient", style="magenta")
+            table.add_column("Quantity", justify="right")
+            table.add_column("Entry Price", justify="right")
+            table.add_column("Entry Date", style="blue")
+            table.add_column("Comment", style="italic")
+            
+            for pos in positions:
+                table.add_row(
+                    str(pos[0]),
+                    f"{pos[1]} {INGREDIENTS[pos[1]]}",
+                    str(pos[2]),
+                    format_price(pos[3]),
+                    pos[4],
+                    pos[5] or ""
+                )
+            
+            console.print(table)
 
     def update_traders(self, count):
         """Update the number of traders."""
@@ -203,74 +269,143 @@ class CookieTrader:
         console.print(f"[green]Updated traders count to {count}. New fee: {new_fee}%[/green]")
 
     def show_trading_history(self):
-        """Display trading history in a colorful table with emojis."""
+        """Display trading history."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT 
-                    h.id,
+                    th.id,
                     p.ingredient,
                     p.quantity,
                     p.entry_price,
-                    h.exit_price,
-                    h.profit_loss,
-                    h.fee_amount,
-                    h.fee_percentage,
-                    p.entry_date,
-                    h.exit_date
-                FROM trading_history h
-                JOIN positions p ON h.position_id = p.id
-                ORDER BY h.exit_date DESC
+                    th.exit_price,
+                    th.profit_loss,
+                    th.fee_percentage,
+                    th.fee_amount,
+                    th.exit_date,
+                    th.comment
+                FROM trading_history th
+                JOIN positions p ON th.position_id = p.id
+                ORDER BY th.exit_date DESC
             ''')
-            history = cursor.fetchall()
+            trades = cursor.fetchall()
             
-        if not history:
-            console.print("[yellow]No trading history found.[/yellow]")
-            return
+            if not trades:
+                console.print("[yellow]No trading history[/yellow]")
+                return
             
-        table = Table(title="Trading History 📜", box=box.ROUNDED)
-        table.add_column("ID", justify="right", style="cyan")
-        table.add_column("Ingredient", style="magenta")
-        table.add_column("Qty", justify="right", style="green")
-        table.add_column("Entry", justify="right", style="yellow")
-        table.add_column("Exit", justify="right", style="yellow")
-        table.add_column("P/L", justify="right", style="bold")
-        table.add_column("Fee", justify="right", style="red")
-        table.add_column("Entry Date", style="blue")
-        table.add_column("Exit Date", style="blue")
+            table = Table(title="Trading History", box=box.ROUNDED)
+            table.add_column("ID", justify="right", style="cyan")
+            table.add_column("Ingredient", style="magenta")
+            table.add_column("Quantity", justify="right")
+            table.add_column("Entry", justify="right")
+            table.add_column("Exit", justify="right")
+            table.add_column("P/L", justify="right")
+            table.add_column("Fee", justify="right")
+            table.add_column("Exit Date", style="blue")
+            table.add_column("Comment", style="italic")
+            
+            for trade in trades:
+                pl_color = "green" if trade[5] >= 0 else "red"
+                pl_emoji = TRADE_EMOJIS['profit'] if trade[5] >= 0 else TRADE_EMOJIS['loss']
+                
+                table.add_row(
+                    str(trade[0]),
+                    f"{trade[1]} {INGREDIENTS[trade[1]]}",
+                    str(trade[2]),
+                    format_price(trade[3]),
+                    format_price(trade[4]),
+                    f"{pl_emoji} [{pl_color}]{format_price(trade[5])}[/{pl_color}]",
+                    f"{trade[6]}%",
+                    format_price(trade[7]),
+                    trade[8],
+                    trade[9] or ""
+                )
+            
+            console.print(table)
+
+    def get_dashboard_info(self):
+        """Get current trading dashboard information."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Get trader count and current fee
+            cursor.execute('SELECT count FROM traders LIMIT 1')
+            trader_count = cursor.fetchone()[0]
+            current_fee = self.get_current_fee()
+            
+            # Get open positions count
+            cursor.execute('SELECT COUNT(*) FROM positions WHERE status = "open"')
+            open_positions = cursor.fetchone()[0]
+            
+            # Get total profit/loss
+            cursor.execute('SELECT SUM(profit_loss) FROM trading_history')
+            total_pl = cursor.fetchone()[0] or 0
+            
+            # Get total trades
+            cursor.execute('SELECT COUNT(*) FROM trading_history')
+            total_trades = cursor.fetchone()[0]
+            
+            return {
+                'traders': trader_count,
+                'fee': current_fee,
+                'open_positions': open_positions,
+                'total_pl': total_pl,
+                'total_trades': total_trades
+            }
+
+    def show_dashboard(self):
+        """Display the trading dashboard."""
+        info = self.get_dashboard_info()
         
-        for trade in history:
-            trade_id, ingredient, qty, entry, exit, pl, fee, fee_pct, entry_date, exit_date = trade
-            
-            # Determine trade status emoji
-            if pl > 0:
-                status_emoji = TRADE_EMOJIS['profit']
-                pl_style = "green"
-            elif pl < 0:
-                status_emoji = TRADE_EMOJIS['loss']
-                pl_style = "red"
-            else:
-                status_emoji = TRADE_EMOJIS['neutral']
-                pl_style = "white"
-            
-            table.add_row(
-                str(trade_id),
-                f"{INGREDIENTS[ingredient]}",
-                str(qty),
-                f"${entry:.2f}",
-                f"${exit:.2f}",
-                f"[{pl_style}]{status_emoji} ${pl:.2f}[/{pl_style}]",
-                f"${fee:.2f} ({fee_pct}%)",
-                entry_date,
-                exit_date
-            )
+        # Create a table for the dashboard
+        table = Table(box=box.ROUNDED, show_header=False, width=60)
+        table.add_column("Key", style="cyan")
+        table.add_column("Value", style="yellow")
         
-        console.print(table)
+        # Add rows with emojis and formatting
+        table.add_row(
+            "👥 Traders",
+            f"[bold]{info['traders']}[/bold] (Fee: [green]{info['fee']}%[/green])"
+        )
+        table.add_row(
+            "📊 Open Positions",
+            f"[bold]{info['open_positions']}[/bold] active trades"
+        )
+        
+        # Format total P/L with color
+        pl_color = "green" if info['total_pl'] >= 0 else "red"
+        pl_emoji = "📈" if info['total_pl'] >= 0 else "📉"
+        table.add_row(
+            f"{pl_emoji} Total P/L",
+            f"[{pl_color}]{format_price(info['total_pl'])}[/{pl_color}]"
+        )
+        
+        table.add_row(
+            "🔄 Total Trades",
+            f"[bold]{info['total_trades']}[/bold] completed"
+        )
+        
+        # Add a title panel
+        panel = Panel(
+            table,
+            title="[bold cyan]Trading Dashboard[/bold cyan]",
+            subtitle=f"[dim]Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/dim]"
+        )
+        
+        console.print("\n")
+        console.print(panel)
+        console.print("\n")
 
     def show_menu(self):
         """Display the main menu and handle user input."""
         while True:
-            console.print("\n[bold cyan]🍪 Cookie Trading Manager[/bold cyan]")
+            console.clear()
+            console.print("[bold cyan]🍪 Cookie Trading Manager[/bold cyan]")
+            
+            # Show dashboard at the top
+            self.show_dashboard()
+            
             console.print("\n1. 📈 Add Position")
             console.print("2. 📉 Close Position")
             console.print("3. 🔮 Simulate Close")
@@ -291,19 +426,52 @@ class CookieTrader:
                     console.print("[red]Invalid ingredient code![/red]")
                     continue
                 quantity = int(Prompt.ask("Enter quantity"))
-                price = float(Prompt.ask("Enter entry price"))
-                self.add_position(ingredient.upper(), quantity, price)
+                
+                # Handle price input
+                while True:
+                    try:
+                        price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45)")
+                        price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                # Get optional comment
+                comment = self.get_comment("Add a comment (optional)")
+                
+                self.add_position(ingredient.upper(), quantity, price, comment)
                 
             elif choice == "2":
                 self.show_open_positions()
                 position_id = int(Prompt.ask("Enter position ID to close"))
-                exit_price = float(Prompt.ask("Enter exit price"))
-                self.close_position(position_id, exit_price)
+                
+                # Handle exit price input
+                while True:
+                    try:
+                        price_str = Prompt.ask("Enter exit price (e.g., 123.45 or $123.45)")
+                        exit_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                # Get optional comment
+                comment = self.get_comment("Add a comment (optional)")
+                
+                self.close_position(position_id, exit_price, comment)
                 
             elif choice == "3":
                 self.show_open_positions()
                 position_id = int(Prompt.ask("Enter position ID to simulate"))
-                exit_price = float(Prompt.ask("Enter hypothetical exit price"))
+                
+                # Handle hypothetical price input
+                while True:
+                    try:
+                        price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45)")
+                        exit_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        console.print(f"[red]{str(e)}[/red]")
+                
                 self.simulate_close(position_id, exit_price)
                 
             elif choice == "4":
