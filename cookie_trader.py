@@ -191,6 +191,7 @@ class CookieTrader:
         if comment:
             output += f"\nComment: {comment}"
         console.print(output)
+        self.wait_for_user()
 
     def close_position(self, position_id, exit_price, comment=""):
         """
@@ -216,18 +217,21 @@ class CookieTrader:
             
             if not position:
                 console.print(f"[red]No open position found with ID {position_id}[/red]")
+                self.wait_for_user()
                 return
             
             ingredient, total_quantity, entry_price, status = position
             
             if status == 'closed':
                 console.print(f"[red]Position {position_id} is already closed![/red]")
+                self.wait_for_user()
                 return
             
             # Ask for number of shares to sell
             sell_quantity = get_quantity("Enter number of shares to sell", total_quantity)
             if sell_quantity is None:
                 console.print("[yellow]Operation cancelled[/yellow]")
+                self.wait_for_user()
                 return
             
             # Calculate profit/loss
@@ -275,6 +279,7 @@ class CookieTrader:
             if comment:
                 output += f"\nComment: {comment}"
             console.print(output)
+            self.wait_for_user()
 
     def get_position(self, position_id):
         """Get a position by ID."""
@@ -365,6 +370,7 @@ class CookieTrader:
         
         new_fee = self.get_current_fee()
         console.print(f"[green]Updated traders count to {count}. New fee: {new_fee}%[/green]")
+        self.wait_for_user()
 
     def show_trading_history(self):
         """Display trading history."""
