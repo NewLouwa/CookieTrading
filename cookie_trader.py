@@ -639,14 +639,23 @@ class CookieTrader:
                 # Handle exit price input
                 while True:
                     try:
-                        price_str = Prompt.ask("Enter exit price (e.g., 123.45 or $123.45)")
+                        price_str = Prompt.ask("Enter exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
+                        if price_str.lower() == 'cancel':
+                            break
                         exit_price = parse_price(price_str)
                         break
                     except ValueError as e:
+                        if str(e) == "Operation cancelled":
+                            break
                         console.print(f"[red]{str(e)}[/red]")
                 
+                if price_str.lower() == 'cancel':
+                    continue
+                
                 # Get optional comment
-                comment = self.get_comment("Add a comment (optional)")
+                comment = self.get_comment("Add a comment (optional, press Enter to skip or 'cancel' to exit)")
+                if comment is None:  # None indicates cancellation
+                    continue
                 
                 self.close_position(position_id, exit_price, comment)
                 
