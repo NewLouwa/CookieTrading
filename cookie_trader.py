@@ -89,6 +89,7 @@ class CookieTrader:
         - traders: Stores the number of traders and last update time
         - positions: Stores open and closed trading positions
         - trading_history: Stores completed trades with P/L information
+        - portfolio: Stores current holdings of each ingredient
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -127,6 +128,16 @@ class CookieTrader:
                     exit_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     comment TEXT,
                     FOREIGN KEY (position_id) REFERENCES positions (id)
+                )
+            ''')
+            
+            # Create portfolio table for current holdings
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS portfolio (
+                    ingredient TEXT PRIMARY KEY,
+                    total_quantity INTEGER DEFAULT 0,
+                    average_price REAL DEFAULT 0,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
@@ -178,10 +189,23 @@ class CookieTrader:
         
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            
+            # Add to positions table (for history)
             cursor.execute('''
                 INSERT INTO positions (ingredient, quantity, entry_price, comment)
                 VALUES (?, ?, ?, ?)
             ''', (ingredient, quantity, price, comment))
+            
+            # Update portfolio
+            cursor.execute('''
+                INSERT INTO portfolio (ingredient, total_quantity, average_price)
+                VALUES (?, ?, ?)
+                ON CONFLICT(ingredient) DO UPDATE SET
+                    total_quantity = total_quantity + ?,
+                    average_price = (average_price * total_quantity + ? * ?) / (total_quantity + ?),
+                    last_updated = CURRENT_TIMESTAMP
+            ''', (ingredient, quantity, price, quantity, price, quantity, quantity))
+            
             conn.commit()
             
         # Display success message with trade details
@@ -193,39 +217,28 @@ class CookieTrader:
         console.print(output)
         self.wait_for_user()
 
-    def close_position(self, position_id, exit_price, comment=""):
+    def close_position(self, ingredient, exit_price, comment=""):
         """
-        Close an existing position or reduce its quantity.
+        Close or reduce a position for a specific ingredient.
         
         Args:
-            position_id (int): ID of the position to close
+            ingredient (str): The ingredient code to close
             exit_price (float): Exit price per share
             comment (str, optional): Optional comment about the closing trade
-            
-        The method supports:
-        - Partial position closing
-        - Full position closing
-        - P/L calculation with fees
-        - Trading history recording
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Get position details
-            cursor.execute('SELECT ingredient, quantity, entry_price, status FROM positions WHERE id = ?', (position_id,))
+            # Get current portfolio position
+            cursor.execute('SELECT total_quantity, average_price FROM portfolio WHERE ingredient = ?', (ingredient,))
             position = cursor.fetchone()
             
             if not position:
-                console.print(f"[red]No open position found with ID {position_id}[/red]")
+                console.print(f"[red]No position found for {ingredient}[/red]")
                 self.wait_for_user()
                 return
             
-            ingredient, total_quantity, entry_price, status = position
-            
-            if status == 'closed':
-                console.print(f"[red]Position {position_id} is already closed![/red]")
-                self.wait_for_user()
-                return
+            total_quantity, avg_price = position
             
             # Ask for number of shares to sell
             sell_quantity = get_quantity("Enter number of shares to sell", total_quantity)
@@ -235,42 +248,37 @@ class CookieTrader:
                 return
             
             # Calculate profit/loss
-            gross_pl = (exit_price - entry_price) * sell_quantity
+            gross_pl = (exit_price - avg_price) * sell_quantity
             fee_percentage = self.get_current_fee()
             fee_amount = abs(gross_pl) * (fee_percentage / 100)
             net_pl = gross_pl - fee_amount
             
-            # Update position status
+            # Update portfolio
             if sell_quantity == total_quantity:
                 # Close the entire position
-                cursor.execute('''
-                    UPDATE positions 
-                    SET status = 'closed',
-                        last_updated = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (position_id,))
+                cursor.execute('DELETE FROM portfolio WHERE ingredient = ?', (ingredient,))
             else:
                 # Update the remaining quantity
                 cursor.execute('''
-                    UPDATE positions 
-                    SET quantity = quantity - ?,
+                    UPDATE portfolio 
+                    SET total_quantity = total_quantity - ?,
                         last_updated = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (sell_quantity, position_id))
+                    WHERE ingredient = ?
+                ''', (sell_quantity, ingredient))
             
             # Record in history
             cursor.execute('''
                 INSERT INTO trading_history 
                 (position_id, exit_price, profit_loss, fee_percentage, fee_amount, comment)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (position_id, exit_price, net_pl, fee_percentage, fee_amount, comment))
+            ''', (None, exit_price, net_pl, fee_percentage, fee_amount, comment))
             
             conn.commit()
             
             pl_color = "green" if net_pl > 0 else "red"
             pl_emoji = "📈" if net_pl > 0 else "📉"
             output = f"\n[{pl_color}]{pl_emoji} Position Closed:[/{pl_color}]"
-            output += f"\nPosition ID: {position_id}"
+            output += f"\nIngredient: {ingredient} {INGREDIENTS[ingredient]}"
             output += f"\nShares Sold: {sell_quantity} of {total_quantity}"
             output += f"\nExit Price: {format_price(exit_price)}"
             output += f"\nGross P/L: {format_price(gross_pl)}"
@@ -610,8 +618,7 @@ Trade Summary:
             elif choice == "4":
                 self.simulate_trade()
             elif choice == "5":
-                self.show_open_positions()
-                self.wait_for_user()
+                self.show_portfolio()
             elif choice == "6":
                 self.show_trading_history()
                 self.wait_for_user()
@@ -623,6 +630,69 @@ Trade Summary:
             else:
                 console.print("[red]Invalid option![/red]")
                 self.wait_for_user()
+
+    def show_menu_options(self):
+        """Display the menu options in a formatted panel."""
+        menu_content = ""
+        
+        # Position Management (Green)
+        menu_content += "\n[bold green]📊 Position Management[/bold green]"
+        menu_content += "\n1. 📈 Open New Position"
+        menu_content += "\n2. 📉 Close Position"
+        menu_content += "\n3. 🔮 Simulate Position Close"
+        menu_content += "\n4. 🎯 Simulate Complete Trade"
+        
+        # Analysis Tools (Blue)
+        menu_content += "\n\n[bold blue]📈 Analysis Tools[/bold blue]"
+        menu_content += "\n5. 📋 View Portfolio"
+        menu_content += "\n6. 📜 Trading History"
+        
+        # Settings & System (Yellow)
+        menu_content += "\n\n[bold yellow]⚙️ Settings & System[/bold yellow]"
+        menu_content += "\n7. 👥 Update Traders Count"
+        menu_content += "\n[bold red]8. ❌ Exit Program[/bold red]"
+        
+        menu_panel = Panel(
+            menu_content,
+            title="[bold]Available Actions[/bold]",
+            border_style="cyan"
+        )
+        console.print(menu_panel)
+
+    def show_portfolio(self):
+        """Display current portfolio holdings."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT ingredient, total_quantity, average_price
+                FROM portfolio
+                WHERE total_quantity > 0
+                ORDER BY ingredient
+            ''')
+            holdings = cursor.fetchall()
+            
+            if not holdings:
+                console.print("[yellow]No holdings in portfolio[/yellow]")
+            else:
+                table = Table(title="Current Portfolio", box=box.ROUNDED)
+                table.add_column("Ingredient", style="magenta")
+                table.add_column("Total Shares", justify="right")
+                table.add_column("Average Price", justify="right")
+                table.add_column("Total Value", justify="right")
+                
+                for holding in holdings:
+                    ingredient, quantity, avg_price = holding
+                    total_value = quantity * avg_price
+                    table.add_row(
+                        f"{ingredient} {INGREDIENTS[ingredient]}",
+                        str(quantity),
+                        format_price(avg_price),
+                        format_price(total_value)
+                    )
+                
+                console.print(table)
+        
+        self.wait_for_user()
 
 if __name__ == "__main__":
     trader = CookieTrader()
