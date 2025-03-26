@@ -78,7 +78,7 @@ class CookieTrader:
 
     def __init__(self):
         """Initialize the CookieTrader with database connection."""
-        self.db_path = 'cookie_trading.db'
+        self.db_path = 'trading.db'
         self.setup_database()
         
     def setup_database(self):
