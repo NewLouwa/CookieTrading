@@ -20,7 +20,7 @@
   - [License](#license)
   - [Trading Tips](#trading-tips)
 
-A terminal-based trading manager for Cookie Clicker's market minigame that helps players track and analyze their trading positions.
+A terminal-based trading simulator for cookie ingredients with real-time profit/loss tracking.
 
 ## About
 
@@ -58,17 +58,14 @@ This tool helps players by:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/cookie-trading.git
-cd cookie-trading
+git clone https://github.com/YourUsername/CookieTrading.git
+cd CookieTrading
 ```
 
-2. Create a virtual environment (recommended):
+2. Create a virtual environment:
 ```bash
 python -m venv venv
-# On Windows:
-venv\Scripts\activate
-# On Unix or MacOS:
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 3. Install dependencies:
@@ -80,36 +77,21 @@ pip install -r requirements.txt
 
 1. Start the program:
 ```bash
-python main.py
+python cookie_trader.py
 ```
 
-2. Main Menu Options:
-   - `1. 📈 Add Position`: Open a new trading position
-   - `2. 📉 Close Position`: Close an existing position
-   - `3. 🔮 Simulate Close`: Test potential position closure
-   - `4. 📊 Show Open Positions`: View current positions
-   - `5. 📜 Show Trading History`: View past trades
-   - `6. 👥 Update Traders Count`: Modify trader count
-   - `7. ❌ Exit`: Close the program
-
-3. Adding a Position:
-   - Select option 1
-   - Choose ingredient code (e.g., BTR for Butter)
-   - Enter quantity
-   - Enter entry price (e.g., $575.21)
-   - Add optional comment (max 500 characters)
-
-4. Closing a Position:
-   - Select option 2
-   - Enter position ID
-   - Enter exit price
-   - Add optional comment (max 500 characters)
-
-5. Simulating a Close:
-   - Select option 3
-   - Enter position ID
-   - Enter hypothetical exit price
-   - View projected profit/loss and fees
+2. Navigate the main menu:
+- Position Actions:
+  - 📈 Open Position: Start a new trading position
+  - 📉 Close Position: Close an existing position (full or partial)
+  - 🔮 Simulate Close: Test potential closing scenarios
+  - 🎯 Simulate Trade: Simulate complete trades
+- View Actions:
+  - 📊 Show Open Positions: View current positions
+  - 📜 Show Trading History: Review past trades
+- Settings & Exit:
+  - 👥 Update Traders Count: Modify fee calculations
+  - ❌ Exit: Close the program
 
 ## Available Ingredients
 
@@ -127,10 +109,9 @@ python main.py
 ## Fee System
 
 - Base fee: 20%
-- Reduction: -1% per trader
-- Example: With 5 traders, fee = 15%
-- Fees are calculated on the absolute value of profit/loss
-- All calculations are rounded to 2 decimal places for precision
+- Each trader reduces fee by 1%
+- Minimum fee: 1%
+- Applied to both profits and losses
 
 ## Data Persistence
 
@@ -145,39 +126,16 @@ All data is stored in `trading.db`:
 ## Project Structure
 
 ```
-cookie-trading/
-├── main.py              # Application entry point
-├── requirements.txt     # Python dependencies
-├── README.md           # This file
+CookieTrading/
 ├── src/
-│   ├── models/         # Data models
-│   │   ├── __init__.py
-│   │   ├── position.py  # Position model
-│   │   └── trade.py     # Trade model
-│   ├── views/          # UI components
-│   │   ├── __init__.py
-│   │   ├── dashboard.py # Dashboard view
-│   │   └── tables.py    # Table views
-│   ├── controllers/    # Business logic
-│   │   ├── __init__.py
-│   │   └── trader.py    # Trader controller
-│   └── utils/          # Helper functions
-│       ├── __init__.py
-│       ├── constants.py # Game constants
-│       ├── database.py  # Database utilities
-│       └── formatting.py # Formatting utilities
-├── tests/              # Test files
-│   ├── __init__.py
-│   ├── conftest.py     # Test configuration
-│   ├── test_position.py
-│   ├── test_trade.py
-│   ├── test_trader.py
-│   ├── test_formatting.py
-│   └── test_database.py
-└── .cursor/           # Development documentation
-    └── rules/         # Project rules and patterns
-        ├── patterns/  # Code patterns
-        └── tasks/     # Task guidelines
+│   ├── models/
+│   ├── views/
+│   ├── controllers/
+│   └── utils/
+├── tests/
+├── cookie_trader.py
+├── requirements.txt
+└── README.md
 ```
 
 ## Development

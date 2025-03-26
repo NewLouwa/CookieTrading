@@ -1,17 +1,9 @@
-# Cursor rules and memory bank
-.cursor/
-
-# SQLite database
-*.db
-cookie_trading.db
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -30,6 +22,7 @@ wheels/
 
 # Virtual Environment
 venv/
+env/
 ENV/
 
 # IDE
@@ -39,8 +32,8 @@ ENV/
 *.swo
 
 # Project specific
-trading.db
-test_trading.db
+*.db
+.cursor/
 
 # Testing
 .coverage
