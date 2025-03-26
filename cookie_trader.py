@@ -199,6 +199,13 @@ class CookieTrader:
         console.print(f"[{pl_color}]Closed position {position_id}:")
         console.print(f"Profit/Loss: {format_price(net_pl)} (Fee: {format_price(fee_amount)} @ {fee_percentage}%)[/{pl_color}]")
 
+    def get_position(self, position_id):
+        """Get a position by ID."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, ingredient, quantity, entry_price FROM positions WHERE id = ? AND status = "open"', (position_id,))
+            return cursor.fetchone()
+
     def simulate_close(self, position_id, exit_price):
         """Simulate closing a position to see potential profit/loss."""
         with sqlite3.connect(self.db_path) as conn:
@@ -208,19 +215,21 @@ class CookieTrader:
             
             if not position:
                 console.print(f"[red]No open position found with ID {position_id}[/red]")
-                return
-            
-            ingredient, quantity, entry_price = position
-            fee_percentage = self.get_current_fee()
-            
-            gross_pl = (exit_price - entry_price) * quantity
-            fee_amount = abs(gross_pl) * (fee_percentage / 100)
-            net_pl = gross_pl - fee_amount
-            
-            pl_color = "green" if net_pl > 0 else "red"
-            console.print(f"\n[yellow]Simulation for position {position_id}:[/yellow]")
-            console.print(f"[{pl_color}]Potential Profit/Loss: {format_price(net_pl)}")
-            console.print(f"Fee: {format_price(fee_amount)} @ {fee_percentage}%[/{pl_color}]")
+            else:
+                ingredient, quantity, entry_price = position
+                
+                gross_pl = (exit_price - entry_price) * quantity
+                fee_percentage = self.get_current_fee()
+                fee_amount = abs(gross_pl) * (fee_percentage / 100)
+                net_pl = gross_pl - fee_amount
+                
+                pl_color = "green" if net_pl > 0 else "red"
+                console.print(f"\n[{pl_color}]Simulation for position {position_id}:")
+                console.print(f"Potential Profit/Loss: {format_price(gross_pl)}")
+                console.print(f"Fee: {format_price(fee_amount)} @ {fee_percentage}%")
+                console.print(f"Net P/L after fees: {format_price(net_pl)}[/{pl_color}]")
+        
+        self.wait_for_user()
 
     def show_open_positions(self):
         """Display all open positions."""
@@ -236,27 +245,28 @@ class CookieTrader:
             
             if not positions:
                 console.print("[yellow]No open positions[/yellow]")
-                return
-            
-            table = Table(title="Open Positions", box=box.ROUNDED)
-            table.add_column("ID", justify="right", style="cyan")
-            table.add_column("Ingredient", style="magenta")
-            table.add_column("Quantity", justify="right")
-            table.add_column("Entry Price", justify="right")
-            table.add_column("Entry Date", style="blue")
-            table.add_column("Comment", style="italic")
-            
-            for pos in positions:
-                table.add_row(
-                    str(pos[0]),
-                    f"{pos[1]} {INGREDIENTS[pos[1]]}",
-                    str(pos[2]),
-                    format_price(pos[3]),
-                    pos[4],
-                    pos[5] or ""
-                )
-            
-            console.print(table)
+            else:
+                table = Table(title="Open Positions", box=box.ROUNDED)
+                table.add_column("ID", justify="right", style="cyan")
+                table.add_column("Ingredient", style="magenta")
+                table.add_column("Quantity", justify="right")
+                table.add_column("Entry Price", justify="right")
+                table.add_column("Entry Date", style="blue")
+                table.add_column("Comment", style="italic")
+                
+                for pos in positions:
+                    table.add_row(
+                        str(pos[0]),
+                        f"{pos[1]} {INGREDIENTS[pos[1]]}",
+                        str(pos[2]),
+                        format_price(pos[3]),
+                        pos[4],
+                        pos[5] or ""
+                    )
+                
+                console.print(table)
+        
+        self.wait_for_user()
 
     def update_traders(self, count):
         """Update the number of traders."""
@@ -292,37 +302,38 @@ class CookieTrader:
             
             if not trades:
                 console.print("[yellow]No trading history[/yellow]")
-                return
-            
-            table = Table(title="Trading History", box=box.ROUNDED)
-            table.add_column("ID", justify="right", style="cyan")
-            table.add_column("Ingredient", style="magenta")
-            table.add_column("Quantity", justify="right")
-            table.add_column("Entry", justify="right")
-            table.add_column("Exit", justify="right")
-            table.add_column("P/L", justify="right")
-            table.add_column("Fee", justify="right")
-            table.add_column("Exit Date", style="blue")
-            table.add_column("Comment", style="italic")
-            
-            for trade in trades:
-                pl_color = "green" if trade[5] >= 0 else "red"
-                pl_emoji = TRADE_EMOJIS['profit'] if trade[5] >= 0 else TRADE_EMOJIS['loss']
+            else:
+                table = Table(title="Trading History", box=box.ROUNDED)
+                table.add_column("ID", justify="right", style="cyan")
+                table.add_column("Ingredient", style="magenta")
+                table.add_column("Quantity", justify="right")
+                table.add_column("Entry", justify="right")
+                table.add_column("Exit", justify="right")
+                table.add_column("P/L", justify="right")
+                table.add_column("Fee", justify="right")
+                table.add_column("Exit Date", style="blue")
+                table.add_column("Comment", style="italic")
                 
-                table.add_row(
-                    str(trade[0]),
-                    f"{trade[1]} {INGREDIENTS[trade[1]]}",
-                    str(trade[2]),
-                    format_price(trade[3]),
-                    format_price(trade[4]),
-                    f"{pl_emoji} [{pl_color}]{format_price(trade[5])}[/{pl_color}]",
-                    f"{trade[6]}%",
-                    format_price(trade[7]),
-                    trade[8],
-                    trade[9] or ""
-                )
-            
-            console.print(table)
+                for trade in trades:
+                    pl_color = "green" if trade[5] >= 0 else "red"
+                    pl_emoji = TRADE_EMOJIS['profit'] if trade[5] >= 0 else TRADE_EMOJIS['loss']
+                    
+                    table.add_row(
+                        str(trade[0]),
+                        f"{trade[1]} {INGREDIENTS[trade[1]]}",
+                        str(trade[2]),
+                        format_price(trade[3]),
+                        format_price(trade[4]),
+                        f"{pl_emoji} [{pl_color}]{format_price(trade[5])}[/{pl_color}]",
+                        f"{trade[6]}%",
+                        format_price(trade[7]),
+                        trade[8],
+                        trade[9] or ""
+                    )
+                
+                console.print(table)
+        
+        self.wait_for_user()
 
     def get_dashboard_info(self):
         """Get current trading dashboard information."""
@@ -397,6 +408,31 @@ class CookieTrader:
         console.print(panel)
         console.print("\n")
 
+    def simulate_trade(self, ingredient, quantity, entry_price, exit_price):
+        """Simulate a complete trade with entry and exit to see potential profit/loss."""
+        if ingredient not in INGREDIENTS:
+            console.print(f"[red]Invalid ingredient code: {ingredient}[/red]")
+        else:
+            gross_pl = (exit_price - entry_price) * quantity
+            fee_percentage = self.get_current_fee()
+            fee_amount = abs(gross_pl) * (fee_percentage / 100)
+            net_pl = gross_pl - fee_amount
+            
+            pl_color = "green" if net_pl > 0 else "red"
+            console.print(f"\n[{pl_color}]Trade Simulation:")
+            console.print(f"Ingredient: {quantity} {INGREDIENTS[ingredient]}")
+            console.print(f"Entry Price: {format_price(entry_price)}")
+            console.print(f"Exit Price: {format_price(exit_price)}")
+            console.print(f"Potential Profit/Loss: {format_price(gross_pl)}")
+            console.print(f"Fee: {format_price(fee_amount)} @ {fee_percentage}%")
+            console.print(f"Net P/L after fees: {format_price(net_pl)}[/{pl_color}]")
+        
+        self.wait_for_user()
+
+    def wait_for_user(self):
+        """Wait for user to press Enter before continuing."""
+        Prompt.ask("\nPress Enter to continue", default="")
+
     def show_menu(self):
         """Display the main menu and handle user input."""
         while True:
@@ -412,9 +448,10 @@ class CookieTrader:
             console.print("4. 📊 Show Open Positions")
             console.print("5. 📜 Show Trading History")
             console.print("6. 👥 Update Traders Count")
-            console.print("7. ❌ Exit")
+            console.print("7. 🎯 Simulate Trade")
+            console.print("8. ❌ Exit")
             
-            choice = Prompt.ask("\nSelect an option", choices=["1", "2", "3", "4", "5", "6", "7"])
+            choice = Prompt.ask("\nSelect an option", choices=["1", "2", "3", "4", "5", "6", "7", "8"])
             
             if choice == "1":
                 # Create ingredient choices display string
@@ -485,6 +522,38 @@ class CookieTrader:
                 self.update_traders(count)
                 
             elif choice == "7":
+                # Create ingredient choices display string
+                ingredient_choices = "/".join(INGREDIENTS.keys())
+                ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
+                console.print(f"\nAvailable ingredients:\n{ingredient_display}")
+                ingredient = Prompt.ask(f"\nEnter ingredient code [{ingredient_choices}]")
+                if ingredient.upper() not in INGREDIENTS:
+                    console.print("[red]Invalid ingredient code![/red]")
+                    continue
+                
+                quantity = int(Prompt.ask("Enter quantity"))
+                
+                # Handle entry price input
+                while True:
+                    try:
+                        price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45)")
+                        entry_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                # Handle exit price input
+                while True:
+                    try:
+                        price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45)")
+                        exit_price = parse_price(price_str)
+                        break
+                    except ValueError as e:
+                        console.print(f"[red]{str(e)}[/red]")
+                
+                self.simulate_trade(ingredient.upper(), quantity, entry_price, exit_price)
+                
+            elif choice == "8":
                 console.print("[yellow]Goodbye! 👋[/yellow]")
                 break
 
