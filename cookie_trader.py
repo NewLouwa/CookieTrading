@@ -563,42 +563,8 @@ Trade Summary:
         self.wait_for_user()
 
     def wait_for_user(self):
-        """
-        Wait for user to press Enter before continuing.
-        If no input is received within 8 seconds, continues automatically.
-        """
-        from time import sleep
-        from threading import Thread
-        from queue import Queue
-        
-        # Create a queue to communicate between threads
-        input_queue = Queue()
-        
-        def get_input():
-            """Get user input in a separate thread."""
-            try:
-                input_queue.put(Prompt.ask("\nPress Enter to continue", default=""))
-            except Exception:
-                input_queue.put(None)
-        
-        # Start input thread
-        input_thread = Thread(target=get_input)
-        input_thread.daemon = True
-        input_thread.start()
-        
-        # Countdown from 8
-        for i in range(8, 0, -1):
-            if not input_thread.is_alive():
-                break
-            console.print(f"\r[dim]Continuing in {i} seconds...[/dim]", end="")
-            sleep(1)
-        
-        # Clear the countdown line
-        console.print("\r" + " " * 30 + "\r", end="")
-        
-        # If input thread is still running, it means user didn't press Enter
-        if input_thread.is_alive():
-            console.print("[dim]Continuing automatically...[/dim]")
+        """Wait for user to press Enter before continuing."""
+        Prompt.ask("\nPress Enter to continue", default="")
 
     def show_menu(self):
         """Display the main menu and handle user input."""
