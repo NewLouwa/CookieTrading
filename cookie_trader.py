@@ -24,7 +24,10 @@ from rich.prompt import Prompt, Confirm
 import emoji
 import re
 from rich.panel import Panel
-from src.utils.formatting import parse_price, format_price, get_comment, get_quantity
+from src.utils.formatting import (
+    parse_price, format_price, get_comment, get_quantity,
+    get_input
+)
 
 # Initialize Rich console for beautiful terminal output
 console = Console()
@@ -589,8 +592,8 @@ class CookieTrader:
                 ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
                 console.print(f"\nAvailable ingredients:\n{ingredient_display}")
                 
-                ingredient = Prompt.ask(f"\nEnter ingredient code [{ingredient_choices}] (or 'cancel' to exit)")
-                if ingredient.lower() == 'cancel':
+                ingredient = get_input(f"\nEnter ingredient code [{ingredient_choices}]")
+                if ingredient is None:
                     continue
                     
                 if ingredient.upper() not in INGREDIENTS:
@@ -599,103 +602,67 @@ class CookieTrader:
                 
                 quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
                 if quantity is None:
-                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 
                 # Handle price input
-                while True:
-                    try:
-                        price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
-                        if price_str.lower() == 'cancel':
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str.lower() == 'cancel':
+                price = get_input(
+                    "Enter entry price (e.g., 123.45 or $123.45)",
+                    validator=parse_price,
+                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
+                )
+                if price is None:
                     continue
                 
                 # Get optional comment
-                comment = get_comment("Add a comment (optional, press Enter to skip or 'cancel' to exit)")
+                comment = get_comment("Add a comment (optional, press Enter to skip)")
                 if comment is None:
-                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 
                 self.add_position(ingredient.upper(), quantity, price, comment)
                 
             elif choice == "2":
                 self.show_open_positions()
-                position_input = Prompt.ask("Enter position ID to close (or 'cancel' to exit)")
-                if position_input.lower() == 'cancel':
-                    console.print("[yellow]Operation cancelled[/yellow]")
-                    continue
-                try:
-                    position_id = int(position_input)
-                except ValueError:
-                    console.print("[red]Invalid position ID![/red]")
-                    self.wait_for_user()
+                position_id = get_input(
+                    "Enter position ID to close",
+                    validator=lambda x: int(x),
+                    error_message="Invalid position ID!"
+                )
+                if position_id is None:
                     continue
                 
                 # Handle exit price input
-                while True:
-                    try:
-                        price_str = Prompt.ask("Enter exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
-                        if price_str.lower() == 'cancel':
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        exit_price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str.lower() == 'cancel':
+                exit_price = get_input(
+                    "Enter exit price (e.g., 123.45 or $123.45)",
+                    validator=parse_price,
+                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
+                )
+                if exit_price is None:
                     continue
                 
                 # Get optional comment
-                comment = get_comment("Add a comment (optional, press Enter to skip or 'cancel' to exit)")
+                comment = get_comment("Add a comment (optional, press Enter to skip)")
                 if comment is None:
-                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 
                 self.close_position(position_id, exit_price, comment)
                 
             elif choice == "3":
                 self.show_open_positions()
-                position_input = Prompt.ask("Enter position ID to simulate (or 'cancel' to exit)")
-                if position_input.lower() == 'cancel':
-                    console.print("[yellow]Operation cancelled[/yellow]")
-                    continue
-                try:
-                    position_id = int(position_input)
-                except ValueError:
-                    console.print("[red]Invalid position ID![/red]")
-                    self.wait_for_user()
+                position_id = get_input(
+                    "Enter position ID to simulate",
+                    validator=lambda x: int(x),
+                    error_message="Invalid position ID!"
+                )
+                if position_id is None:
                     continue
 
                 # Handle hypothetical price input
-                while True:
-                    try:
-                        price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
-                        if price_str.lower() == 'cancel':
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        exit_price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str.lower() == 'cancel':
+                exit_price = get_input(
+                    "Enter hypothetical exit price (e.g., 123.45 or $123.45)",
+                    validator=parse_price,
+                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
+                )
+                if exit_price is None:
                     continue
                 
                 self.simulate_close(position_id, exit_price)
@@ -706,9 +673,8 @@ class CookieTrader:
                 ingredient_display = "\n".join([f"{code} {INGREDIENTS[code]}" for code in INGREDIENTS.keys()])
                 console.print(f"\nAvailable ingredients:\n{ingredient_display}")
                 
-                ingredient = Prompt.ask(f"\nEnter ingredient code [{ingredient_choices}] (or 'cancel' to exit)")
-                if ingredient.lower() == 'cancel':
-                    console.print("[yellow]Operation cancelled[/yellow]")
+                ingredient = get_input(f"\nEnter ingredient code [{ingredient_choices}]")
+                if ingredient is None:
                     continue
                     
                 if ingredient.upper() not in INGREDIENTS:
@@ -717,43 +683,24 @@ class CookieTrader:
                 
                 quantity = get_quantity("Enter number of shares", 1000)  # Example max limit
                 if quantity is None:
-                    console.print("[yellow]Operation cancelled[/yellow]")
                     continue
                 
                 # Handle entry price input
-                while True:
-                    try:
-                        price_str = Prompt.ask("Enter entry price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
-                        if price_str.lower() == 'cancel':
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        entry_price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str.lower() == 'cancel':
+                entry_price = get_input(
+                    "Enter entry price (e.g., 123.45 or $123.45)",
+                    validator=parse_price,
+                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
+                )
+                if entry_price is None:
                     continue
                 
                 # Handle exit price input
-                while True:
-                    try:
-                        price_str = Prompt.ask("Enter hypothetical exit price (e.g., 123.45 or $123.45, or 'cancel' to exit)")
-                        if price_str.lower() == 'cancel':
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        exit_price = parse_price(price_str)
-                        break
-                    except ValueError as e:
-                        if str(e) == "Operation cancelled":
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        console.print(f"[red]{str(e)}[/red]")
-                
-                if price_str.lower() == 'cancel':
+                exit_price = get_input(
+                    "Enter hypothetical exit price (e.g., 123.45 or $123.45)",
+                    validator=parse_price,
+                    error_message="Invalid price format. Enter a number (e.g., 123.45 or $123.45)"
+                )
+                if exit_price is None:
                     continue
                 
                 self.simulate_trade(ingredient.upper(), quantity, entry_price, exit_price)
@@ -765,23 +712,19 @@ class CookieTrader:
                 self.show_trading_history()
                 
             elif choice == "7":
-                while True:
-                    try:
-                        count_input = Prompt.ask("Enter new trader count (or 'cancel' to exit)")
-                        if count_input.lower() == 'cancel':
-                            console.print("[yellow]Operation cancelled[/yellow]")
-                            break
-                        count = int(count_input)
-                        if count < 0:
-                            raise ValueError("Trader count cannot be negative")
-                        self.update_traders(count)
-                        break
-                    except ValueError as e:
-                        console.print(f"[red]Invalid trader count: {str(e)}[/red]")
-                        self.wait_for_user()
-                
-                if count_input.lower() == 'cancel':
+                count = get_input(
+                    "Enter new trader count",
+                    validator=lambda x: int(x),
+                    error_message="Invalid trader count!"
+                )
+                if count is None:
                     continue
+                    
+                if count < 0:
+                    console.print("[red]Trader count cannot be negative![/red]")
+                    continue
+                    
+                self.update_traders(count)
                 
             elif choice == "8":
                 console.print("[red]Goodbye! 👋[/red]")
